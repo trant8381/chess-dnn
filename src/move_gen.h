@@ -919,6 +919,7 @@ private:
 	static constexpr Bitboard NO_CASTLING_MASK = 0x9100000000000091;
 
 	Bitboard from_to{};
+	u16 moveCount{};
 	Piece captured{};
 	Square ep_square = NO_SQUARE;
 	u16 fifty_move_rule{};
@@ -932,7 +933,6 @@ public:
 class Position {
 private:
 	Color side = WHITE;
-
 	
 	array<Piece, NSQUARES> board{};
 
@@ -966,12 +966,13 @@ public:
 	[[nodiscard]] inline ZobristHash hash() const { return state_history.peek().hash; }
 	[[nodiscard]] inline Bitboard from_to() const { return state_history.peek().from_to; }
 	[[nodiscard]] inline Color turn() const { return side; }
+	[[nodiscard]] inline u16 moves() const { return state_history.peek().moveCount; }
 
 	enum Repetition : i32 {
 		TWO_FOLD,
 		THREE_FOLD
 	};
-	[[nodiscard]] inline bool has_repetition(Repetition fold = TWO_FOLD);
+	[[nodiscard]] inline bool has_repetition(Repetition fold = TWO_FOLD) const;
 
 	template<Color color>
 	[[nodiscard]] inline bool king_and_oo_rook_not_moved() const {
@@ -1197,7 +1198,7 @@ inline std::ostream& operator << (std::ostream& os, const Position& p) {
 	return os;
 }
 
-inline bool Position::has_repetition(Repetition fold) {
+inline bool Position::has_repetition(Repetition fold) const {
 	int count = fold == THREE_FOLD ? 0 : 1;
 	const i32 hash_hist_size = static_cast<int>(state_history.size());
 	const u64 current_hash = hash();
@@ -1219,6 +1220,7 @@ inline void Position::play(Move move) {
 	next_state.hash = state_history.peek().hash;
 	next_state.fifty_move_rule = state_history.peek().fifty_move_rule + 1;
 	next_state.ep_square = NO_SQUARE;
+	next_state.moveCount = state_history.peek().fifty_move_rule + 1;
 
 	if (move.is_capture() || type_of(piece_at(move.from())) == PAWN)
 		next_state.fifty_move_rule = 0;

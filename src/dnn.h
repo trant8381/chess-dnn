@@ -12,10 +12,7 @@
 #include <torch/nn/options/conv.h>
 #include <torch/nn/pimpl.h>
 #include <torch/torch.h>
-
-constexpr int INPUT_PLANES = 63;
-constexpr int TRUNK_CHANNELS = 256;
-constexpr int TOWER_SIZE = 20;
+#include "constants.h"
 
 struct Eval {
   torch::Tensor value;
