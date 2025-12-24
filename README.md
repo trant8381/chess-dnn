@@ -11,3 +11,6 @@
 8.     cmake ..
 9.     make
 10.     ./main
+
+## Credit to
+https://github.com/archishou/MidnightMoveGen
