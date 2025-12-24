@@ -14,16 +14,6 @@
 #include <torch/torch.h>
 #include "constants.h"
 
-struct Eval {
-  torch::Tensor value;
-  torch::Tensor policy;
-
-  Eval(torch::Tensor _value, torch::Tensor _policy) {
-    value = _value;
-    policy = _policy;
-  }
-};
-
 class ConvBlockImpl : public torch::nn::Module {
 private:
   torch::nn::Conv2d conv;

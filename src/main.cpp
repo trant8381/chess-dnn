@@ -1,6 +1,7 @@
-#include "constants.h"
+#include "create_state.h"
 #include "dnn.h"
-#include "move_gen.h"
 #include <torch/torch.h>
 
-int main() {}
+int main() {
+  
+}
