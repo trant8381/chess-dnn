@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <vector>
 
+// creates a vector of Move with some hacks to get aorund templates.
 std::vector<Midnight::Move> createMovelistVec(Midnight::Position board) {
   const Midnight::Move *begin;
   const Midnight::Move *end;
@@ -22,6 +23,7 @@ std::vector<Midnight::Move> createMovelistVec(Midnight::Position board) {
   return std::vector<Midnight::Move>(begin, end);
 }
 
+// checks whether the position has insufficient material.
 bool insufficientMaterial(Midnight::Position &board) {
   for (Midnight::PieceType pieceType :
        {Midnight::PAWN, Midnight::ROOK, Midnight::QUEEN}) {
@@ -61,6 +63,7 @@ bool insufficientMaterial(Midnight::Position &board) {
   return false;
 }
 
+// check if the board state is terminal
 bool isTerminal(Midnight::Position &board) {
   std::vector<Midnight::Move> movelist = createMovelistVec(board);
 
@@ -75,6 +78,7 @@ bool isTerminal(Midnight::Position &board) {
   return false;
 }
 
+// returns the board state's terminal value if board is terminal.
 float terminalValue(Midnight::Position &board) {
   uint64_t whiteKingBoard = board.pieces[Midnight::WHITE_KING];
   uint64_t blackKingBoard = board.pieces[Midnight::BLACK_KING];
@@ -104,6 +108,7 @@ float terminalValue(Midnight::Position &board) {
   return 0.0f;
 }
 
+// creates an array of the history boards.
 std::array<Position, HISTORY_BOARDS> constructHistory(Node *node) {
   std::array<Position, HISTORY_BOARDS> history;
   Node* currNode = node;
