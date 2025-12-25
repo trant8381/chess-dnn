@@ -6,9 +6,9 @@ struct Node {
   Node *parent;
   std::vector<Node> children;
   Midnight::Position position;
-  uint32_t visitTotal;
+  float totalValue;
   uint32_t visitCount;
-  uint32_t visitMean;
+  uint32_t meanValue;
   float policyEval;
 
   Node(Node *_parent, const std::vector<Node> _children,
@@ -16,19 +16,20 @@ struct Node {
     parent = _parent;
     children = _children;
     position = _position;
-    visitTotal = 0;
+    totalValue = 0;
     visitCount = 0;
-    visitMean = 0;
+    meanValue = 0;
     policyEval = _policyEval;
   }
 
-  Node(const std::vector<Node> _children, const Midnight::Position _position, float _policyEval) {
+  Node(const std::vector<Node> _children, const Midnight::Position _position,
+       float _policyEval) {
     parent = nullptr;
     children = _children;
     position = _position;
-    visitTotal = 0;
+    totalValue = 0;
     visitCount = 0;
-    visitMean = 0;
+    meanValue = 0;
     policyEval = _policyEval;
   }
 };

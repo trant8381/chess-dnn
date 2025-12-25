@@ -3,7 +3,9 @@
 #include "create_state.h"
 #include "dnn.h"
 #include "move_gen.h"
+#include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <cstdint>
 #include <vector>
 
@@ -156,13 +158,56 @@ float policyIndex(Position &board, Move move) {
   return move.from() * 73 + moveType;
 }
 
-// wip
+void expand(Node *node, const torch::Tensor &policy) {
+  std::vector<Move> movelist = createMovelistVec(node->position);
+
+  for (Move move : movelist) {
+    if (node->position.turn() == WHITE) {
+      node->position.play<WHITE>(move);
+    } else {
+      node->position.play<BLACK>(move);
+    }
+
+    node->children.push_back(
+        Node(node, {}, node->position,
+             policy[policyIndex(node->position, move)].item().toFloat()));
+
+    if (node->position.turn() == WHITE) {
+      node->position.undo<WHITE>(move);
+    } else {
+      node->position.undo<BLACK>(move);
+    }
+  }
+}
+
+float puct(const Node &node) {
+  return node.meanValue +
+         (C_PUCT * node.policyEval *
+          (sqrt(node.parent->visitCount) / (1 + node.visitCount)));
+}
+
+Node select(Node *node) {
+  auto best = (std::max_element(node->children.begin(), node->children.end(),
+                                [](const Node &child1, const Node &child2) {
+                                  return puct(child1) < puct(child2);
+                                }));
+  return *best;
+}
+
 float simulate(Node *node, DNN &model) {
   if (isTerminal(node->position)) {
     return terminalValue(node->position);
   } else if (node->children.size() == 0) {
     auto [value, policy] = model->forward(createState(constructHistory(node)));
-
+    expand(node, policy);
     return value.item().toFloat();
   }
+
+  Node selected = select(node);
+  float val = simulate(&selected, model);
+  selected.visitCount += 1;
+  selected.totalValue += val;
+  selected.meanValue = selected.totalValue / selected.visitCount;
+
+  return -val;
 }

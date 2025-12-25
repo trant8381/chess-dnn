@@ -9,6 +9,7 @@ constexpr int INPUT_PLANES =
        // situational planes.
 constexpr int TRUNK_CHANNELS = 256; // channels per resnet block.
 constexpr int TOWER_SIZE = 20;      // amount of resnet blocks.
+constexpr float C_PUCT = 1.5f;      // PUCT constant for MCTS selection.
 
 // the return struct on a forward pass of the whole model.
 struct Eval {
