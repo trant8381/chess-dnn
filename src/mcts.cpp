@@ -3,6 +3,7 @@
 #include "create_state.h"
 #include "dnn.h"
 #include "move_gen.h"
+#include <cassert>
 #include <cstdint>
 #include <vector>
 
@@ -111,7 +112,7 @@ float terminalValue(Midnight::Position &board) {
 // creates an array of the history boards.
 std::array<Position, HISTORY_BOARDS> constructHistory(Node *node) {
   std::array<Position, HISTORY_BOARDS> history;
-  Node* currNode = node;
+  Node *currNode = node;
   for (int i = 0; i < HISTORY_BOARDS; i++) {
     history[i] = currNode->position;
     currNode = currNode->parent;
@@ -120,8 +121,43 @@ std::array<Position, HISTORY_BOARDS> constructHistory(Node *node) {
   return history;
 }
 
+static const int KDX[8] = {1, 2, 2, 1, -1, -2, -2, -1};
+static const int KDY[8] = {2, 1, -1, -2, -2, -1, 1, 2};
+
+float policyIndex(Position &board, Move move) {
+  Piece piece = board.piece_at(move.from());
+  PieceType pieceType = static_cast<PieceType>(piece % 8);
+  int diffx = move.to() % 8 - move.from() % 8;
+  int diffy = move.to() / 8 - move.from() / 8;
+  int moveType;
+
+  if (pieceType == KNIGHT) {
+    for (int i = 0; i < 8; i++) {
+      if (diffx == KDX[i] && diffy == KDY[i]) {
+        moveType = 56 + i;
+        break;
+      }
+    }
+  } else {
+    int distance = std::max(abs(diffx), abs(diffy)) - 1;
+    int direction = (diffx == 0  ? 0
+                     : diffx > 0 ? 1
+                                 : 2) +
+                    3 * (diffy == 0  ? 0
+                         : diffy > 0 ? 1
+                                     : 2);
+    if (move.is_promotion() && ((move.type() & 0b0111) != PR_QUEEN)) {
+      moveType = 64 + (move.type() & 0b0011) * 3 + direction - 3;
+    } else {
+      moveType = direction * 7 + distance;
+    }
+  }
+
+  return move.from() * 73 + moveType;
+}
+
 // wip
-float simulate(Node* node, DNN &model) {
+float simulate(Node *node, DNN &model) {
   if (isTerminal(node->position)) {
     return terminalValue(node->position);
   } else if (node->children.size() == 0) {
