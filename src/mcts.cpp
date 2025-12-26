@@ -130,6 +130,8 @@ std::array<Position, HISTORY_BOARDS> constructHistory(Node *node) {
 static const int KDX[8] = {1, 2, 2, 1, -1, -2, -2, -1};
 static const int KDY[8] = {2, 1, -1, -2, -2, -1, 1, 2};
 
+// returns the index for the policy tensor that corresponds to a move on the
+// board.
 float policyIndex(Position &board, Move move) {
   Piece piece = board.piece_at(move.from());
   PieceType pieceType = static_cast<PieceType>(piece % 8);
@@ -162,6 +164,7 @@ float policyIndex(Position &board, Move move) {
   return move.from() * 73 + moveType;
 }
 
+// expansion stage of MCTS.
 void expand(Node *node, const torch::Tensor &policy) {
   std::vector<Move> movelist = createMovelistVec(node->position);
 
@@ -186,12 +189,14 @@ void expand(Node *node, const torch::Tensor &policy) {
   }
 }
 
+// applies the PUCT formula.
 float puct(const Node &node) {
   return node.meanValue +
          (C_PUCT * node.policyEval *
-          (sqrt(node.parent->visitCount) / (1 + node.visitCount)));
+          (sqrtf(node.parent->visitCount) / (1 + node.visitCount)));
 }
 
+// applies one MCTS simulation step to the specified node.
 float simulate(Node *node, DNN &model) {
   if (isTerminal(node->position)) {
     return terminalValue(node->position);
