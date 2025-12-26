@@ -196,20 +196,28 @@ float puct(const Node &node) {
           (sqrtf(node.parent->visitCount) / (1 + node.visitCount)));
 }
 
+void backup(Node *node, float val) {
+  node->visitCount += 1;
+  node->totalValue += val;
+  node->meanValue = node->totalValue / node->visitCount;
+}
+
 // applies one MCTS simulation step to the specified node.
 float simulate(Node *node, DNN &model) {
   if (isTerminal(node->position)) {
-    return terminalValue(node->position);
+    float val = terminalValue(node->position);
+    backup(node, val);
+    return -val;
   } else if (node->children.size() == 0) {
     auto [value, policy] = model->forward(
         torch::unsqueeze(createState(constructHistory(node)), 0));
+
+    float val = value.item<float>();
     expand(node, policy[0]);
-    return value.item().toFloat();
+    backup(node, val);
+    return -val;
   }
 
-  auto compareNodes = [](const Node &child1, const Node &child2) {
-    return puct(child1) < puct(child2);
-  };
   Node *selected = &node->children[0];
 
   for (Node &child : node->children) {
@@ -219,8 +227,6 @@ float simulate(Node *node, DNN &model) {
   }
 
   float val = simulate(selected, model);
-  selected->visitCount += 1;
-  selected->totalValue += val;
-  selected->meanValue = selected->totalValue / selected->visitCount;
+  backup(selected, val);
   return -val;
 }
