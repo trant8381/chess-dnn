@@ -1,3 +1,4 @@
+#include "dnn.h"
 #include "move_gen.h"
 #include <cstdint>
 #include <vector>
@@ -8,7 +9,7 @@ struct Node {
   Midnight::Position position;
   float totalValue;
   uint32_t visitCount;
-  uint32_t meanValue;
+  float meanValue;
   float policyEval;
 
   Node(Node *_parent, const std::vector<Node> _children,
@@ -33,3 +34,5 @@ struct Node {
     policyEval = _policyEval;
   }
 };
+
+float simulate(Node *node, DNN &model);

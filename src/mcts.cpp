@@ -116,8 +116,12 @@ std::array<Position, HISTORY_BOARDS> constructHistory(Node *node) {
   std::array<Position, HISTORY_BOARDS> history;
   Node *currNode = node;
   for (int i = 0; i < HISTORY_BOARDS; i++) {
-    history[i] = currNode->position;
-    currNode = currNode->parent;
+    if (currNode == nullptr) {
+      history[i] = Position(START_FEN);
+    } else {
+      history[i] = currNode->position;
+      currNode = currNode->parent;
+    }
   }
 
   return history;
@@ -168,9 +172,11 @@ void expand(Node *node, const torch::Tensor &policy) {
       node->position.play<BLACK>(move);
     }
 
-    node->children.push_back(
+    Node child =
         Node(node, {}, node->position,
-             policy[policyIndex(node->position, move)].item().toFloat()));
+             policy[policyIndex(node->position, move)].item().toFloat());
+
+    node->children.push_back(child);
 
     if (node->position.turn() == WHITE) {
       node->position.undo<WHITE>(move);
@@ -186,28 +192,30 @@ float puct(const Node &node) {
           (sqrt(node.parent->visitCount) / (1 + node.visitCount)));
 }
 
-Node select(Node *node) {
-  auto best = (std::max_element(node->children.begin(), node->children.end(),
-                                [](const Node &child1, const Node &child2) {
-                                  return puct(child1) < puct(child2);
-                                }));
-  return *best;
-}
-
 float simulate(Node *node, DNN &model) {
   if (isTerminal(node->position)) {
     return terminalValue(node->position);
   } else if (node->children.size() == 0) {
-    auto [value, policy] = model->forward(createState(constructHistory(node)));
-    expand(node, policy);
+    auto [value, policy] = model->forward(
+        torch::unsqueeze(createState(constructHistory(node)), 0));
+    expand(node, policy[0]);
     return value.item().toFloat();
   }
 
-  Node selected = select(node);
-  float val = simulate(&selected, model);
-  selected.visitCount += 1;
-  selected.totalValue += val;
-  selected.meanValue = selected.totalValue / selected.visitCount;
+  auto compareNodes = [](const Node &child1, const Node &child2) {
+    return puct(child1) < puct(child2);
+  };
+  Node *selected = &node->children[0];
 
+  for (Node &child : node->children) {
+    if (puct(child) > puct(*selected)) {
+      selected = &child;
+    }
+  }
+
+  float val = simulate(selected, model);
+  selected->visitCount += 1;
+  selected->totalValue += val;
+  selected->meanValue = selected->totalValue / selected->visitCount;
   return -val;
 }
