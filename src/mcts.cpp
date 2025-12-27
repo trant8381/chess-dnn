@@ -236,7 +236,6 @@ float simulate(Node *node, DNN &model, const torch::Device &device) {
 Node *playMove(Node *root, DNN &model, const torch::Device &device,
               float temperature) {
   for (int i = 0; i < 800; i++) {
-    std::cout << i << std::endl;
     simulate(root, model, device);
   }
 
