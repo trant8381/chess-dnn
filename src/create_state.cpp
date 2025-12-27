@@ -1,10 +1,12 @@
 #include "create_state.h"
+#include <c10/core/Device.h>
 
 // creates the input planes to be put into DNN.
 // possibly need to normalize some of these features
-torch::Tensor createState(const std::array<Position, HISTORY_BOARDS> &boards) {
+torch::Tensor createState(const std::array<Position, HISTORY_BOARDS> &boards,
+                          const torch::Device &device) {
   // initialize the planes.
-  torch::Tensor boardState = torch::zeros({INPUT_PLANES, 8, 8});
+  torch::Tensor boardState = torch::zeros({INPUT_PLANES, 8, 8}).to(device, 0);
 
   for (int i = 0; i < HISTORY_BOARDS; i++) {
     for (int pieceType = 0; pieceType < 6; pieceType++) {

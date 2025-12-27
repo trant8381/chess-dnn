@@ -7,4 +7,5 @@
 
 using namespace Midnight;
 
-torch::Tensor createState(const std::array<Position, HISTORY_BOARDS> &boards);
+torch::Tensor createState(const std::array<Position, HISTORY_BOARDS> &boards,
+                          const torch::Device &device);

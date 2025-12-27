@@ -36,5 +36,6 @@ struct Node {
 };
 
 bool isTerminal(Midnight::Position &board);
-float simulate(Node *node, DNN &model);
-Node playMove(Node *root, DNN &model, float temperature);
+float simulate(Node *node, DNN &model, const torch::Device &device);
+Node playMove(Node *root, DNN &model, const torch::Device &device,
+              float temperature);

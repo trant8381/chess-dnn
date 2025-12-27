@@ -204,14 +204,14 @@ void backup(Node *node, float val) {
 }
 
 // applies one MCTS simulation step to the specified node.
-float simulate(Node *node, DNN &model) {
+float simulate(Node *node, DNN &model, const torch::Device &device) {
   if (isTerminal(node->position)) {
     float val = terminalValue(node->position);
     backup(node, val);
     return -val;
   } else if (node->children.size() == 0) {
     auto [value, policy] = model->forward(
-        torch::unsqueeze(createState(constructHistory(node)), 0));
+        torch::unsqueeze(createState(constructHistory(node), device), 0));
 
     float val = value.item<float>();
     expand(node, policy[0]);
@@ -227,15 +227,16 @@ float simulate(Node *node, DNN &model) {
     }
   }
 
-  float val = simulate(selected, model);
+  float val = simulate(selected, model, device);
   backup(selected, val);
   return -val;
 }
 
 // selects a node to play in mcts.
-Node playMove(Node *root, DNN &model, float temperature) {
+Node playMove(Node *root, DNN &model, const torch::Device &device,
+              float temperature) {
   for (int i = 0; i < 800; i++) {
-    simulate(root, model);
+    simulate(root, model, device);
   }
 
   float total = 0;
