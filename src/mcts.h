@@ -35,4 +35,6 @@ struct Node {
   }
 };
 
+bool isTerminal(Midnight::Position &board);
 float simulate(Node *node, DNN &model);
+Node playMove(Node *root, DNN &model, float temperature);

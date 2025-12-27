@@ -7,6 +7,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdint>
+#include <cstdlib>
 #include <vector>
 
 // creates a vector of Move with some hacks to get aorund templates.
@@ -229,4 +230,28 @@ float simulate(Node *node, DNN &model) {
   float val = simulate(selected, model);
   backup(selected, val);
   return -val;
+}
+
+// selects a node to play in mcts.
+Node playMove(Node *root, DNN &model, float temperature) {
+  for (int i = 0; i < 800; i++) {
+    simulate(root, model);
+  }
+
+  float total = 0;
+  for (Node &node : root->children) {
+    total += pow(node.visitCount, 1.0 / temperature);
+  }
+
+  int i = rand() % static_cast<int>(total);
+  float curr = 0;
+
+  for (Node &node : root->children) {
+    curr += pow(node.visitCount, 1.0 / temperature);
+    if (curr < i) {
+      return node;
+    }
+  }
+
+  assert(false);
 }

@@ -8,11 +8,14 @@ int main() {
 
   Node root = Node({}, Midnight::Position(Midnight::START_FEN), 0);
 
-  for (int i = 0; i < 800; i++) {
-    simulate(&root, model);
-  }
+  while (true) {
+    if (isTerminal(root.position)) {
+      break;
+    }
+    float temperature = 1.0f;
+    root = playMove(&root, model, temperature);
+    temperature = std::pow(temperature + 1, -0.42f);
 
-  for (Node &child : root.children) {
-    std::cout << child.meanValue << std::endl;
+    std::cout << root.position << std::endl;
   }
 }
