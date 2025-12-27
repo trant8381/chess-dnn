@@ -15,16 +15,32 @@ int main() {
   }
 
   model->to(device, 0);
+  torch::NoGradGuard no_grad;
+  model->eval();
+
   Node *root = new Node({}, Midnight::Position(Midnight::START_FEN), 0);
+
 
   while (true) {
     if (isTerminal(root->position)) {
       break;
     }
     float temperature = 1.0f;
-    root = playMove(root, model, device, temperature);
+    Node* selected = playMove(root, model, device, temperature);
+    for (Node* node : root->children) {
+      if (node != selected) {
+        delete node;
+      }
+    }
+    root->children.clear();
+    root->children.push_back(selected);
+  
+    root = selected;
+
     temperature = std::pow(temperature + 1, -0.42f);
 
     std::cout << root->position << std::endl;
+
+    
   }
 }

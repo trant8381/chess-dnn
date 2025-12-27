@@ -33,6 +33,12 @@ struct Node {
     meanValue = 0;
     policyEval = _policyEval;
   }
+
+  ~Node() {
+    for (Node* node : children) {
+      delete node;
+    }
+  }
 };
 
 bool isTerminal(Midnight::Position &board);
