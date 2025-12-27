@@ -23,6 +23,7 @@ int main() {
     }
     float temperature = 1.0f;
     root = playMove(&root, model, device, temperature);
+    std::cout << "root parent position" << root.parent->position << std::endl;
     temperature = std::pow(temperature + 1, -0.42f);
 
     std::cout << root.position << std::endl;

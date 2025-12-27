@@ -114,15 +114,14 @@ float terminalValue(Midnight::Position &board) {
 
 // creates an array of the history boards.
 std::array<Position, HISTORY_BOARDS> constructHistory(Node *node) {
-  std::array<Position, HISTORY_BOARDS> history;
-  Node *currNode = node;
-  for (int i = 0; i < HISTORY_BOARDS; i++) {
-    if (currNode == nullptr) {
-      history[i] = Position(START_FEN);
-    } else {
-      history[i] = currNode->position;
-      currNode = currNode->parent;
-    }
+  std::array<Position, HISTORY_BOARDS> history = {
+      Position(START_FEN), Position(START_FEN), Position(START_FEN),
+      Position(START_FEN)};
+
+  const Node *current = node;
+  for (int i = 0; i < 4 && current != nullptr; i++) {
+    history[i] = current->position;
+    current = current->parent;
   }
 
   return history;
@@ -236,6 +235,7 @@ float simulate(Node *node, DNN &model, const torch::Device &device) {
 Node playMove(Node *root, DNN &model, const torch::Device &device,
               float temperature) {
   for (int i = 0; i < 800; i++) {
+    std::cout << i << std::endl;
     simulate(root, model, device);
   }
 
@@ -249,10 +249,11 @@ Node playMove(Node *root, DNN &model, const torch::Device &device,
 
   for (Node &node : root->children) {
     curr += pow(node.visitCount, 1.0 / temperature);
-    if (curr < i) {
+    if (curr >= i) {
       return node;
     }
   }
+  std::cout << "here4" << std::endl;
 
   assert(false);
 }
