@@ -137,10 +137,10 @@ float policyIndex(Position &board, Move move) {
   PieceType pieceType = static_cast<PieceType>(piece % 8);
   int diffx = move.to() % 8 - move.from() % 8;
   int diffy = move.to() / 8 - move.from() / 8;
-  int moveType;
+  int moveType = 0;
 
   if (pieceType == KNIGHT) {
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0;; i++) {
       if (diffx == KDX[i] && diffy == KDY[i]) {
         moveType = 56 + i;
         break;
