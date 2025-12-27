@@ -15,17 +15,17 @@ int main() {
   }
 
   model->to(device, 0);
-  Node root = Node({}, Midnight::Position(Midnight::START_FEN), 0);
+  Node *root = new Node({}, Midnight::Position(Midnight::START_FEN), 0);
 
   while (true) {
-    if (isTerminal(root.position)) {
+    if (isTerminal(root->position)) {
       break;
     }
     float temperature = 1.0f;
-    root = playMove(&root, model, device, temperature);
-    std::cout << "root parent position" << root.parent->position << std::endl;
+    root = playMove(root, model, device, temperature);
+    std::cout << "root parent position" << root->parent->position << std::endl;
     temperature = std::pow(temperature + 1, -0.42f);
 
-    std::cout << root.position << std::endl;
+    std::cout << root->position << std::endl;
   }
 }

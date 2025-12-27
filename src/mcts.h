@@ -5,14 +5,14 @@
 
 struct Node {
   Node *parent;
-  std::vector<Node> children;
+  std::vector<Node*> children;
   Midnight::Position position;
   float totalValue;
   uint32_t visitCount;
   float meanValue;
   float policyEval;
 
-  Node(Node *_parent, const std::vector<Node> _children,
+  Node(Node *_parent, const std::vector<Node*> _children,
        const Midnight::Position _position, float _policyEval) {
     parent = _parent;
     children = _children;
@@ -23,7 +23,7 @@ struct Node {
     policyEval = _policyEval;
   }
 
-  Node(const std::vector<Node> _children, const Midnight::Position _position,
+  Node(const std::vector<Node*> _children, const Midnight::Position _position,
        float _policyEval) {
     parent = nullptr;
     children = _children;
@@ -37,5 +37,5 @@ struct Node {
 
 bool isTerminal(Midnight::Position &board);
 float simulate(Node *node, DNN &model, const torch::Device &device);
-Node playMove(Node *root, DNN &model, const torch::Device &device,
+Node *playMove(Node *root, DNN &model, const torch::Device &device,
               float temperature);

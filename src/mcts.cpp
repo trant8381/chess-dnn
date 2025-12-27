@@ -175,13 +175,12 @@ void expand(Node *node, const torch::Tensor &policy) {
       node->position.play<BLACK>(move);
     }
 
-    Node child =
-        Node(node, {}, node->position,
+    Node *child = new Node(node, {}, node->position,
              policy[policyIndex(node->position, move)].item().toFloat());
 
     node->children.push_back(child);
 
-    if (node->position.turn() == WHITE) {
+    if (node->position.turn() == BLACK) {
       node->position.undo<WHITE>(move);
     } else {
       node->position.undo<BLACK>(move);
@@ -190,10 +189,12 @@ void expand(Node *node, const torch::Tensor &policy) {
 }
 
 // applies the PUCT formula.
-float puct(const Node &node) {
-  return node.meanValue +
-         (C_PUCT * node.policyEval *
-          (sqrtf(node.parent->visitCount) / (1 + node.visitCount)));
+float puct(const Node *node) {
+  return node->meanValue +
+         (C_PUCT * node->policyEval *
+          (sqrtf
+            (node->parent->visitCount) /
+             (1 + node->visitCount)));
 }
 
 void backup(Node *node, float val) {
@@ -218,11 +219,11 @@ float simulate(Node *node, DNN &model, const torch::Device &device) {
     return -val;
   }
 
-  Node *selected = &node->children[0];
+  Node *selected = node->children[0];
 
-  for (Node &child : node->children) {
-    if (puct(child) > puct(*selected)) {
-      selected = &child;
+  for (Node *child : node->children) {
+    if (puct(child) > puct(selected)) {
+      selected = child;
     }
   }
 
@@ -232,7 +233,7 @@ float simulate(Node *node, DNN &model, const torch::Device &device) {
 }
 
 // selects a node to play in mcts.
-Node playMove(Node *root, DNN &model, const torch::Device &device,
+Node *playMove(Node *root, DNN &model, const torch::Device &device,
               float temperature) {
   for (int i = 0; i < 800; i++) {
     std::cout << i << std::endl;
@@ -240,20 +241,19 @@ Node playMove(Node *root, DNN &model, const torch::Device &device,
   }
 
   float total = 0;
-  for (Node &node : root->children) {
-    total += pow(node.visitCount, 1.0 / temperature);
+  for (Node *node : root->children) {
+    total += pow(node->visitCount, 1.0 / temperature);
   }
 
   int i = rand() % static_cast<int>(total);
   float curr = 0;
 
-  for (Node &node : root->children) {
-    curr += pow(node.visitCount, 1.0 / temperature);
+  for (Node *node : root->children) {
+    curr += pow(node->visitCount, 1.0 / temperature);
     if (curr >= i) {
       return node;
     }
   }
-  std::cout << "here4" << std::endl;
 
   assert(false);
 }
