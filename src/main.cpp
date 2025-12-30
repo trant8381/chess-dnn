@@ -20,6 +20,12 @@ int main() {
 
   Node *root = new Node({}, Midnight::Position(Midnight::START_FEN), 0);
 
+  // for (Midnight::Move move : createMovelistVec(root->position)) {
+  //   root->position.play<Midnight::WHITE>(move);
+  //   Node node = Node({}, root->position, 0);
+  //   root->children.push_back(&node);
+  //   root->position.undo<Midnight::WHITE>(move);
+  // }
 
   while (true) {
     if (isTerminal(root->position)) {
@@ -40,7 +46,5 @@ int main() {
     temperature = std::pow(temperature + 1, -0.42f);
 
     std::cout << root->position << std::endl;
-
-    
   }
 }
