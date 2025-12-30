@@ -4,11 +4,26 @@
 #include "dnn.h"
 #include "move_gen.h"
 #include <algorithm>
+#include <c10/core/DeviceType.h>
 #include <cassert>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <mutex>
+#include <queue>
+#include <thread>
+#include <torch/csrc/autograd/generated/variable_factories.h>
 #include <vector>
+
+constexpr int BUFFER_SIZE = 32;
+
+std::queue<Node *> buffer;
+int count, in = 0;
+bool finished = false;
+
+std::mutex mutex;
+std::condition_variable not_full;
+std::condition_variable not_empty;
 
 // creates a vector of Move with some hacks to get aorund templates.
 std::vector<Midnight::Move> createMovelistVec(Midnight::Position board) {
@@ -169,22 +184,18 @@ void expand(Node *node, const torch::Tensor &policy) {
   std::vector<Move> movelist = createMovelistVec(node->position);
 
   for (Move move : movelist) {
-    if (node->position.turn() == WHITE) {
-      node->position.play<WHITE>(move);
+    Position newBoard = node->position;
+    if (newBoard.turn() == WHITE) {
+      newBoard.play<WHITE>(move);
     } else {
-      node->position.play<BLACK>(move);
+      newBoard.play<BLACK>(move);
     }
 
-    Node *child = new Node(node, {}, node->position,
-             policy[policyIndex(node->position, move)].item().toFloat());
+    Node *child =
+        new Node(node, {}, newBoard,
+                 policy[policyIndex(newBoard, move)].item().toFloat());
 
     node->children.push_back(child);
-
-    if (node->position.turn() == BLACK) {
-      node->position.undo<WHITE>(move);
-    } else {
-      node->position.undo<BLACK>(move);
-    }
   }
 }
 
@@ -192,58 +203,141 @@ void expand(Node *node, const torch::Tensor &policy) {
 float puct(const Node *node) {
   return node->meanValue +
          (C_PUCT * node->policyEval *
-          (sqrtf
-            (node->parent->visitCount) /
-             (1 + node->visitCount)));
+          (sqrtf(node->parent->visitCount) / (1 + node->visitCount)));
 }
 
-void backup(Node *node, float val) {
+void backup(Node *node, float value) {
+  while (node) {
+    std::unique_lock<std::mutex> nodeLock(node->mutex);
+    node->visitCount += 1;
+    node->totalValue += value;
+    node->meanValue = node->totalValue / node->visitCount;
+    nodeLock.unlock();
+
+    value = -value;
+    node = node->parent;
+  }
+}
+
+void addVirtualLoss(Node *node) {
+  std::unique_lock<std::mutex> nodeLock(node->mutex);
+  node->state = EVALUTING;
   node->visitCount += 1;
-  node->totalValue += val;
+  node->totalValue -= 1;
   node->meanValue = node->totalValue / node->visitCount;
+  node->virtualLoss += 1;
+  nodeLock.unlock();
 }
 
-// applies one MCTS simulation step to the specified node.
-float simulate(Node *node, DNN &model, const torch::Device &device) {
+float simulate(Node *node) {
   if (isTerminal(node->position)) {
     float val = terminalValue(node->position);
     backup(node, val);
     return -val;
-  } else if (node->children.size() == 0) {
-    auto [value, policy] = model->forward(
-        torch::unsqueeze(createState(constructHistory(node), device), 0));
+  } else if (node->state == UNVISITED) {
+    std::unique_lock<std::mutex> bufferLock(mutex);
+    // addVirtualLoss(node);
 
-    float val = value.item<float>();
-    expand(node, policy[0]);
+    while (count == BUFFER_SIZE) {
+      not_full.wait(bufferLock);
+    }
+
+    buffer.push(node);
+    not_empty.notify_one();
+    bufferLock.unlock();
+
+    count++;
+    in++;
+
+    return 0;
+  } else if (node->state == EVALUTING) {
+    return 0;
+  } else {
+    if (node->children.size() == 0) {
+      return 0;
+    }
+
+    Node *selected = node->children[0];
+
+    for (Node *child : node->children) {
+      if (puct(child) > puct(selected)) {
+        selected = child;
+      }
+    }
+
+    float val = simulate(selected);
     backup(node, val);
     return -val;
   }
+}
 
-  Node *selected = node->children[0];
+void undoVirtualLoss(Node *node) {
+  std::unique_lock<std::mutex> nodeLock(node->mutex);
+  node->totalValue += node->virtualLoss;
+  node->visitCount -= node->virtualLoss;
+  node->meanValue = node->totalValue / node->visitCount;
+  nodeLock.unlock();
+}
 
-  for (Node *child : node->children) {
-    if (puct(child) > puct(selected)) {
-      selected = child;
+void evaluate(DNN &model) {
+  while (!(finished && buffer.empty())) {
+    std::vector<Node *> batch;
+
+    std::unique_lock<std::mutex> lock(mutex);
+    while (batch.size() < BATCH_SIZE && (buffer.size() != 0)) {
+      batch.push_back(buffer.front());
+      buffer.pop();
+      count -= 1;
+    }
+    lock.unlock();
+
+    if (batch.empty()) {
+      continue;
+    }
+
+    not_full.notify_one();
+    int batchSize = batch.size();
+
+    std::cout << "size: " << batchSize << std::endl;
+    torch::Tensor input = torch::zeros({batchSize, INPUT_PLANES, 8, 8});
+    for (int i = 0; i < batchSize; i++) {
+      input[i] = createState(constructHistory(batch[i]), torch::kCPU);
+    }
+
+    auto [values, policies] = model->forward(input);
+
+    for (int i = 0; i < batchSize; i++) {
+      Node *node = batch[i];
+      std::unique_lock<std::mutex> nodeLock(node->mutex);
+      node->state = DONE;
+      nodeLock.unlock();
+
+      expand(node, policies[i]);
+      backup(node, values[i].item().toFloat());
+      // undoVirtualLoss(node);
     }
   }
-
-  float val = simulate(selected, model, device);
-  backup(selected, val);
-  return -val;
 }
 
 // selects a node to play in mcts.
 Node *playMove(Node *root, DNN &model, const torch::Device &device,
-              float temperature) {
-  for (int i = 0; i < 800; i++) {
-    simulate(root, model, device);
-  }
+               float temperature) {
+  std::thread batchThread(evaluate, std::ref(model));
+  std::thread simulationThread([&]() {
+    while (in < 800) {
+      simulate(root);
+    }
+    finished = true;
+  });
+
+  batchThread.join();
+  simulationThread.join();
 
   float total = 0;
   for (Node *node : root->children) {
     total += pow(node->visitCount, 1.0 / temperature);
   }
-
+  std::cout << "total:" << total << std::endl;
   int i = rand() % static_cast<int>(total);
   float curr = 0;
 
