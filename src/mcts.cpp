@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-// Node *transpositionTable[TABLE_SIZE] = {};
+Node *transpositionTable[TABLE_SIZE] = {};
 std::unordered_map<uint64_t, Node *> tree;
 struct Batch {
   std::vector<torch::Tensor> nnInputs;
@@ -211,7 +211,7 @@ void updateStatistics(float res, Node *node, Node *childNode, bool batch) {
   Statistics parentStats = getTreeStats(node, batch);
   Statistics childStats = getTreeStats(childNode, batch);
 
-  if (res != UNKNOWN && batch) {
+  if (res != UNKNOWN) {
     *parentStats.totalValue += res;
     *parentStats.visitCount += 1;
     *childStats.totalValue += res;
@@ -244,11 +244,14 @@ float batchPUCT(Node *node, bool getBatch) {
     return terminalValue(node->position);
   }
 
-  if (node->children.size() == 0) {
+  if (!node->initialized) {
     if (getBatch) {
       batch.nodes.push_back(node);
       batch.nnInputs.push_back(
           createState(constructHistory(node), torch::kCPU));
+    } else if (node->valueEval != INFINITY) {
+      node->initialized = true;
+      return node->valueEval;
     }
     return UNKNOWN;
   }
@@ -279,11 +282,7 @@ float batchPUCT(Node *node, bool getBatch) {
 
   float res = batchPUCT(selected, getBatch);
 
-  if (getBatch) {
-    updateStatisticsGet(res, node, selected, getBatch);
-  } else {
-    updateStatistics(res, node, selected, getBatch);
-  }
+  updateStatisticsGet(res, node, selected, getBatch);
   if (res != UNKNOWN) {
     return -res;
   }
@@ -304,7 +303,6 @@ void getBatch(Node *node) {
 }
 
 void putBatch(Node *node, std::vector<Node *> &nodes, Eval &outputs) {
-  std::cout << batch.nodes.size() << std::endl;
   for (size_t i = 0; i < nodes.size(); i++) {
     for (Move move : createMovelistVec(nodes[i]->position)) {
       Midnight::Position newBoard(nodes[i]->position);
@@ -320,7 +318,7 @@ void putBatch(Node *node, std::vector<Node *> &nodes, Eval &outputs) {
     }
 
     nodes[i]->valueEval = outputs.value[i].item().toFloat();
-    // transpositionTable[nodes[i]->position.hash() % TABLE_SIZE] = nodes[i];
+    transpositionTable[nodes[i]->position.hash() % TABLE_SIZE] = nodes[i];
   }
 
   batch.nnInputs = {};
@@ -335,27 +333,35 @@ void putBatch(Node *node, std::vector<Node *> &nodes, Eval &outputs) {
   }
 }
 
-Node *getNextMove(Node *node, DNN &model) {
+Node *getNextMove(Node *node, DNN &model, torch::Device &device, float temperature) {
   for (int i = 0; i < SIMULATIONS;) {
     getBatch(node);
     torch::Tensor batchedInput = torch::zeros(
-        {static_cast<long>(batch.nnInputs.size()), INPUT_PLANES, 8, 8});
+        {static_cast<long>(batch.nnInputs.size()), INPUT_PLANES, 8, 8}).to(device);
     for (size_t j = 0; j < batch.nnInputs.size(); j++) {
-      batchedInput[j] = batch.nnInputs[j];
+      batchedInput[j] = batch.nnInputs[j].to(device);
     }
+
     i += batch.nnInputs.size();
 
     Eval outputs = model->forward(batchedInput);
     putBatch(node, batch.nodes, outputs);
   }
 
-  Node *selected = *node->children.begin();
+
+  float total = 0;
+  for (Node *child : node->children) {
+    total += pow(child->visitCount, 1.0 / temperature);
+  }
+  int i = rand() % static_cast<int>(total);
+  float curr = 0;
 
   for (Node *child : node->children) {
-    if (child->visitCount > selected->visitCount) {
-      selected = child;
+    curr += pow(child->visitCount, 1.0 / temperature);
+    if (curr >= i) {
+      return child;
     }
   }
 
-  return selected;
+  assert(false);
 }

@@ -20,13 +20,13 @@ int main() {
 
   Node *root = new Node(nullptr, {}, Midnight::Position(Midnight::START_FEN));
 
-
   while (true) {
     if (isTerminal(root->position)) {
       break;
     }
     float temperature = 1.0f;
-    Node* selected = getNextMove(root, model);
+    Node* selected = getNextMove(root, model, device, temperature);
+
     for (Node* node : root->children) {
       if (node != selected) {
         delete node;

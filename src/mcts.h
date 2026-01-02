@@ -1,5 +1,6 @@
 #include "dnn.h"
 #include "move_gen.h"
+#include <cmath>
 
 // one node in the mcts game tree.
 struct Node {
@@ -13,9 +14,11 @@ struct Node {
   float batch_totalValue = 0;
   uint32_t batch_visitCount = 0;
 
+  bool initialized = false;
+
   uint32_t batchNum = 0;
 
-  float valueEval;
+  float valueEval = INFINITY;
   float policyEval;
 
   Node(Node *_parent, const std::set<Node *> _children,
@@ -45,5 +48,5 @@ struct Node {
   }
 };
 
-Node *getNextMove(Node *node, DNN &model);
+Node *getNextMove(Node *node, DNN &model, torch::Device &device, float temperature);
 bool isTerminal(Midnight::Position &board);
