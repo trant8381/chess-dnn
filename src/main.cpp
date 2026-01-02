@@ -18,7 +18,7 @@ int main() {
   torch::NoGradGuard no_grad;
   model->eval();
 
-  Node *root = new Node({}, Midnight::Position(Midnight::START_FEN), 0);
+  Node *root = new Node(nullptr, {}, Midnight::Position(Midnight::START_FEN));
 
 
   while (true) {
@@ -26,21 +26,19 @@ int main() {
       break;
     }
     float temperature = 1.0f;
-    Node* selected = playMove(root, model, device, temperature);
+    Node* selected = getNextMove(root, model);
     for (Node* node : root->children) {
       if (node != selected) {
         delete node;
       }
     }
     root->children.clear();
-    root->children.push_back(selected);
+    root->children.insert(selected);
   
     root = selected;
 
     temperature = std::pow(temperature + 1, -0.42f);
 
     std::cout << root->position << std::endl;
-
-    
   }
 }

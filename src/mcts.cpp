@@ -3,12 +3,26 @@
 #include "create_state.h"
 #include "dnn.h"
 #include "move_gen.h"
+#include <ATen/core/interned_strings.h>
+#include <ATen/ops/zero.h>
 #include <algorithm>
+#include <c10/core/DeviceType.h>
 #include <cassert>
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <unordered_map>
 #include <vector>
+
+Node *transpositionTable[TABLE_SIZE] = {};
+float temperature = 1.0f;
+std::unordered_map<uint64_t, Node *> tree;
+struct Batch {
+  std::vector<torch::Tensor> nnInputs;
+  std::vector<Node *> nodes;
+};
+Batch batch;
 
 // creates a vector of Move with some hacks to get aorund templates.
 std::vector<Midnight::Move> createMovelistVec(Midnight::Position board) {
@@ -25,6 +39,14 @@ std::vector<Midnight::Move> createMovelistVec(Midnight::Position board) {
   }
 
   return std::vector<Midnight::Move>(begin, end);
+}
+
+void playMove(Midnight::Position &board, const Midnight::Move move) {
+  if (board.turn() == WHITE) {
+    board.play<WHITE>(move);
+  } else {
+    board.play<BLACK>(move);
+  }
 }
 
 // checks whether the position has insufficient material.
@@ -164,95 +186,158 @@ float policyIndex(Position &board, Move move) {
   return move.from() * 73 + moveType;
 }
 
-// expansion stage of MCTS.
-void expand(Node *node, const torch::Tensor &policy) {
-  std::vector<Move> movelist = createMovelistVec(node->position);
-
-  for (Move move : movelist) {
-    if (node->position.turn() == WHITE) {
-      node->position.play<WHITE>(move);
-    } else {
-      node->position.play<BLACK>(move);
-    }
-
-    Node *child = new Node(node, {}, node->position,
-             policy[policyIndex(node->position, move)].item().toFloat());
-
-    node->children.push_back(child);
-
-    if (node->position.turn() == BLACK) {
-      node->position.undo<WHITE>(move);
-    } else {
-      node->position.undo<BLACK>(move);
-    }
+void updateStatistics(float res, Node *node, Node *childNode, bool batch) {
+  if (res != UNKNOWN && batch) {
+    node->batch_totalValue += res;
+    node->batch_visitCount += 1;
+    childNode->batch_totalValue += res;
+    childNode->batch_visitCount += 1;
+  } else if (res != UNKNOWN) {
+    node->totalValue += res;
+    node->visitCount += 1;
+    childNode->totalValue += res;
+    childNode->visitCount += 1;
   }
 }
 
-// applies the PUCT formula.
-float puct(const Node *node) {
-  return node->meanValue +
-         (C_PUCT * node->policyEval *
-          (sqrtf
-            (node->parent->visitCount) /
-             (1 + node->visitCount)));
+void updateStatisticsGet(float res, Node *node, Node *childNode, bool batch) {
+  if (res == UNKNOWN) {
+    Statistics parentStats = node->getTreeStats(batch);
+    Statistics childStats = childNode->getTreeStats(batch);
+    float mean;
+    if (*childStats.visitCount == 0) {
+      mean = FPU;
+    } else {
+      mean = *childStats.totalValue / *childStats.visitCount;
+    }
+
+    *childStats.totalValue += VL * mean;
+    *childStats.visitCount += VL;
+    *parentStats.totalValue += VL * mean;
+    *parentStats.visitCount += VL;
+  } else {
+    updateStatistics(res, node, childNode, batch);
+  }
 }
 
-void backup(Node *node, float val) {
-  node->visitCount += 1;
-  node->totalValue += val;
-  node->meanValue = node->totalValue / node->visitCount;
+bool *getTreeInitialized(Node *node, bool isBatch) {
+  return isBatch ? &node->batch_initialized : &node->initialized;
 }
 
-// applies one MCTS simulation step to the specified node.
-float simulate(Node *node, DNN &model, const torch::Device &device) {
+float batchPUCT(Node *node, bool getBatch) {
   if (isTerminal(node->position)) {
-    float val = terminalValue(node->position);
-    backup(node, val);
-    return -val;
-  } else if (node->children.size() == 0) {
-    auto [value, policy] = model->forward(
-        torch::unsqueeze(createState(constructHistory(node), device), 0));
-
-    float val = value.item<float>();
-    expand(node, policy[0]);
-    backup(node, val);
-    return -val;
+    return terminalValue(node->position);
   }
 
-  Node *selected = node->children[0];
+  if (node->children.size() == 0) {
+    if (getBatch) {
+      batch.nodes.push_back(node);
+      batch.nnInputs.push_back(
+          createState(constructHistory(node), torch::kCPU));
+    }
+    return UNKNOWN;
+  }
+
+  float bestScore = -INFINITY;
+  Node *selected = nullptr;
+
+  for (Node *childNode : node->children) {
+    Statistics childStats = childNode->getTreeStats(getBatch);
+    Statistics nodeStats = node->getTreeStats(getBatch);
+    float mean = FPU;
+
+    if (*childStats.visitCount > 0) {
+      mean = *childStats.totalValue / *childStats.visitCount;
+    }
+    // std::cout << mean << " " << childNode->policyEval << " " <<
+    // *nodeStats.visitCount << " " << *childStats.visitCount << " " <<
+    // *childStats.totalValue << std::endl;
+    float bandit = mean + C_PUCT * childNode->policyEval *
+                              (sqrtf(*nodeStats.visitCount) /
+                               (1 + *childStats.visitCount));
+
+    if (bandit > bestScore) {
+      bestScore = bandit;
+      selected = childNode;
+    }
+  }
+
+  float res = batchPUCT(selected, getBatch);
+
+  if (getBatch) {
+    updateStatisticsGet(res, node, selected, getBatch);
+  } else {
+    updateStatistics(res, node, selected, getBatch);
+  }
+
+  return res;
+}
+
+void getBatch(Node *node) {
+  for (int i = 0; i < 32; i++) {
+    batchPUCT(node, true);
+    if (batch.nodes.size() >= 2 &&
+        batch.nodes[batch.nodes.size() - 1]->position.hash() ==
+            batch.nodes[batch.nodes.size() - 2]->position.hash()) {
+      batch.nodes.pop_back();
+      batch.nnInputs.pop_back();
+      break;
+    }
+  }
+}
+
+void putBatch(Node *node, std::vector<Node *> &nodes, Eval &outputs) {
+  std::cout << batch.nodes.size() << std::endl;
+  for (size_t i = 0; i < nodes.size(); i++) {
+    for (Move move : createMovelistVec(nodes[i]->position)) {
+      Midnight::Position newBoard(nodes[i]->position);
+      playMove(newBoard, move);
+
+      Node *childNode =
+          new Node(nodes[i], {}, newBoard,
+                   outputs.policy[i][policyIndex(nodes[i]->position, move)]
+                       .item()
+                       .toFloat());
+
+      nodes[i]->children.insert(childNode);
+    }
+
+    nodes[i]->valueEval = outputs.value[i].item().toFloat();
+    transpositionTable[nodes[i]->position.hash() % TABLE_SIZE] = nodes[i];
+  }
+
+  batch.nnInputs = {};
+  batch.nodes = {};
+
+  while (true) {
+    float result = batchPUCT(node, false);
+
+    if (result == UNKNOWN) {
+      break;
+    }
+  }
+}
+
+Node *getNextMove(Node *node, DNN &model) {
+  for (int i = 0; i < SIMULATIONS; i++) {
+    getBatch(node);
+    torch::Tensor batchedInput = torch::zeros(
+        {static_cast<long>(batch.nnInputs.size()), INPUT_PLANES, 8, 8});
+    for (size_t i = 0; i < batch.nnInputs.size(); i++) {
+      batchedInput[i] = batch.nnInputs[i];
+    }
+
+    Eval outputs = model->forward(batchedInput);
+    putBatch(node, batch.nodes, outputs);
+  }
+
+  Node *selected = *node->children.begin();
 
   for (Node *child : node->children) {
-    if (puct(child) > puct(selected)) {
+    if (child->visitCount > selected->visitCount) {
       selected = child;
     }
   }
 
-  float val = simulate(selected, model, device);
-  backup(selected, val);
-  return -val;
-}
-
-// selects a node to play in mcts.
-Node *playMove(Node *root, DNN &model, const torch::Device &device,
-              float temperature) {
-  for (int i = 0; i < 800; i++) {
-    simulate(root, model, device);
-  }
-
-  float total = 0;
-  for (Node *node : root->children) {
-    total += pow(node->visitCount, 1.0 / temperature);
-  }
-
-  int i = rand() % static_cast<int>(total);
-  float curr = 0;
-
-  for (Node *node : root->children) {
-    curr += pow(node->visitCount, 1.0 / temperature);
-    if (curr >= i) {
-      return node;
-    }
-  }
-
-  assert(false);
+  return selected;
 }

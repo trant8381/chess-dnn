@@ -25,7 +25,7 @@ add_executable (main "${SRC}/main.cpp"
                      "${SRC}/create_state.cpp"
                      "${SRC}/mcts.cpp")
 target_link_libraries(main ${TORCH_LIBRARIES})
-target_compile_options(main PRIVATE -Wall -Wextra -g)
+target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
 
 # -------------------- REMOVE WINDOWS ERRORS --------------------
 # The following code block is suggested to be used on Windows.
