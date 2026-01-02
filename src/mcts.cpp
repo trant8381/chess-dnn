@@ -16,13 +16,34 @@
 #include <vector>
 
 Node *transpositionTable[TABLE_SIZE] = {};
-float temperature = 1.0f;
 std::unordered_map<uint64_t, Node *> tree;
 struct Batch {
   std::vector<torch::Tensor> nnInputs;
   std::vector<Node *> nodes;
 };
+uint32_t currBatchNum = 0;
 Batch batch;
+
+struct Statistics {
+  float *totalValue;
+  uint32_t *visitCount;
+
+  Statistics(float *_totalValue, uint32_t *_visitCount)
+      : totalValue(_totalValue), visitCount(_visitCount) {}
+};
+
+Statistics getTreeStats(Node *node, bool isBatch) {
+  if (node->batchNum < currBatchNum) {
+    node->batchNum = currBatchNum;
+    node->batch_totalValue = node->totalValue;
+    node->batch_visitCount = node->visitCount;
+  }
+  if (isBatch) {
+    return Statistics(&node->batch_totalValue, &node->batch_visitCount);
+  } else {
+    return Statistics(&node->totalValue, &node->visitCount);
+  }
+}
 
 // creates a vector of Move with some hacks to get aorund templates.
 std::vector<Midnight::Move> createMovelistVec(Midnight::Position board) {
@@ -202,8 +223,8 @@ void updateStatistics(float res, Node *node, Node *childNode, bool batch) {
 
 void updateStatisticsGet(float res, Node *node, Node *childNode, bool batch) {
   if (res == UNKNOWN) {
-    Statistics parentStats = node->getTreeStats(batch);
-    Statistics childStats = childNode->getTreeStats(batch);
+    Statistics parentStats = getTreeStats(node, batch);
+    Statistics childStats = getTreeStats(childNode, batch);
     float mean;
     if (*childStats.visitCount == 0) {
       mean = FPU;
@@ -218,10 +239,6 @@ void updateStatisticsGet(float res, Node *node, Node *childNode, bool batch) {
   } else {
     updateStatistics(res, node, childNode, batch);
   }
-}
-
-bool *getTreeInitialized(Node *node, bool isBatch) {
-  return isBatch ? &node->batch_initialized : &node->initialized;
 }
 
 float batchPUCT(Node *node, bool getBatch) {
@@ -242,8 +259,8 @@ float batchPUCT(Node *node, bool getBatch) {
   Node *selected = nullptr;
 
   for (Node *childNode : node->children) {
-    Statistics childStats = childNode->getTreeStats(getBatch);
-    Statistics nodeStats = node->getTreeStats(getBatch);
+    Statistics childStats = getTreeStats(childNode, getBatch);
+    Statistics nodeStats = getTreeStats(node, getBatch);
     float mean = FPU;
 
     if (*childStats.visitCount > 0) {
@@ -319,13 +336,14 @@ void putBatch(Node *node, std::vector<Node *> &nodes, Eval &outputs) {
 }
 
 Node *getNextMove(Node *node, DNN &model) {
-  for (int i = 0; i < SIMULATIONS; i++) {
+  for (int i = 0; i < SIMULATIONS;) {
     getBatch(node);
     torch::Tensor batchedInput = torch::zeros(
         {static_cast<long>(batch.nnInputs.size()), INPUT_PLANES, 8, 8});
-    for (size_t i = 0; i < batch.nnInputs.size(); i++) {
-      batchedInput[i] = batch.nnInputs[i];
+    for (size_t j = 0; j < batch.nnInputs.size(); j++) {
+      batchedInput[j] = batch.nnInputs[j];
     }
+    i += batch.nnInputs.size();
 
     Eval outputs = model->forward(batchedInput);
     putBatch(node, batch.nodes, outputs);
