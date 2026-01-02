@@ -15,7 +15,7 @@
 #include <unordered_map>
 #include <vector>
 
-Node *transpositionTable[TABLE_SIZE] = {};
+// Node *transpositionTable[TABLE_SIZE] = {};
 std::unordered_map<uint64_t, Node *> tree;
 struct Batch {
   std::vector<torch::Tensor> nnInputs;
@@ -208,16 +208,14 @@ float policyIndex(Position &board, Move move) {
 }
 
 void updateStatistics(float res, Node *node, Node *childNode, bool batch) {
+  Statistics parentStats = getTreeStats(node, batch);
+  Statistics childStats = getTreeStats(childNode, batch);
+
   if (res != UNKNOWN && batch) {
-    node->batch_totalValue += res;
-    node->batch_visitCount += 1;
-    childNode->batch_totalValue += res;
-    childNode->batch_visitCount += 1;
-  } else if (res != UNKNOWN) {
-    node->totalValue += res;
-    node->visitCount += 1;
-    childNode->totalValue += res;
-    childNode->visitCount += 1;
+    *parentStats.totalValue += res;
+    *parentStats.visitCount += 1;
+    *childStats.totalValue += res;
+    *childStats.visitCount += 1;
   }
 }
 
@@ -286,8 +284,10 @@ float batchPUCT(Node *node, bool getBatch) {
   } else {
     updateStatistics(res, node, selected, getBatch);
   }
-
-  return res;
+  if (res != UNKNOWN) {
+    return -res;
+  }
+  return UNKNOWN;
 }
 
 void getBatch(Node *node) {
@@ -320,7 +320,7 @@ void putBatch(Node *node, std::vector<Node *> &nodes, Eval &outputs) {
     }
 
     nodes[i]->valueEval = outputs.value[i].item().toFloat();
-    transpositionTable[nodes[i]->position.hash() % TABLE_SIZE] = nodes[i];
+    // transpositionTable[nodes[i]->position.hash() % TABLE_SIZE] = nodes[i];
   }
 
   batch.nnInputs = {};
