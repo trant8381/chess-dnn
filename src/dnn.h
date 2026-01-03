@@ -1,4 +1,5 @@
 #pragma once
+#include "constants.h"
 #include <ATen/core/TensorBody.h>
 #include <string>
 #include <torch/nn/module.h>
@@ -12,7 +13,6 @@
 #include <torch/nn/options/conv.h>
 #include <torch/nn/pimpl.h>
 #include <torch/torch.h>
-#include "constants.h"
 
 // the return struct on a forward pass of the whole model.
 struct Eval {

@@ -58,5 +58,6 @@ struct GlobalData {
   Batch batch = {};
 };
 
-Node *getNextMove(Node *node, DNN &model, torch::Device device, float temperature, GlobalData &g);
+Node *getNextMove(Node *node, DNN &model, torch::Device device,
+                  float temperature, GlobalData &g);
 bool isTerminal(Midnight::Position &board);

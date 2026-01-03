@@ -14,8 +14,6 @@
 #include <cstdlib>
 #include <vector>
 
-Node *transpositionTable[TABLE_SIZE] = {};
-
 struct Statistics {
   float *totalValue;
   uint32_t *visitCount;
@@ -199,7 +197,8 @@ float policyIndex(Position &board, Move move) {
   return move.from() * 73 + moveType;
 }
 
-void updateStatistics(float res, Node *node, Node *childNode, bool batch, GlobalData &g) {
+void updateStatistics(float res, Node *node, Node *childNode, bool batch,
+                      GlobalData &g) {
   Statistics parentStats = getTreeStats(node, batch, g);
   Statistics childStats = getTreeStats(childNode, batch, g);
 
@@ -211,7 +210,8 @@ void updateStatistics(float res, Node *node, Node *childNode, bool batch, Global
   }
 }
 
-void updateStatisticsGet(float res, Node *node, Node *childNode, bool batch, GlobalData &g) {
+void updateStatisticsGet(float res, Node *node, Node *childNode, bool batch,
+                         GlobalData &g) {
   if (res == UNKNOWN) {
     Statistics parentStats = getTreeStats(node, batch, g);
     Statistics childStats = getTreeStats(childNode, batch, g);
@@ -232,7 +232,7 @@ void updateStatisticsGet(float res, Node *node, Node *childNode, bool batch, Glo
 }
 
 float batchPUCT(Node *node, bool getBatch, GlobalData &g) {
-  Batch& batch = g.batch;
+  Batch &batch = g.batch;
   if (isTerminal(node->position)) {
     return terminalValue(node->position);
   }
@@ -295,12 +295,11 @@ void getBatch(Node *node, GlobalData &g) {
       break;
     }
   }
-
 }
 
-void putBatch(Node *node, Eval &outputs, GlobalData& g) {
+void putBatch(Node *node, Eval &outputs, GlobalData &g) {
   Batch &batch = g.batch;
-  std::vector<Node*> &nodes = batch.nodes;
+  std::vector<Node *> &nodes = batch.nodes;
 
   for (size_t i = 0; i < nodes.size(); i++) {
     for (Move move : createMovelistVec(nodes[i]->position)) {
@@ -317,7 +316,6 @@ void putBatch(Node *node, Eval &outputs, GlobalData& g) {
     }
 
     nodes[i]->valueEval = outputs.value[i].item().toFloat();
-    transpositionTable[nodes[i]->position.hash() % TABLE_SIZE] = nodes[i];
   }
 
   batch.nnInputs = {};

@@ -50,35 +50,29 @@ Node *createRoot() {
 
 int main() {
   std::vector<torch::Device> devices = {torch::kCPU};
-  std::vector<DNN> models = {DNN()};
   std::vector<Node *> rootNodes = {createRoot()};
 
   if (torch::cuda::is_available()) {
     devices = {};
-    models = {};
-    rootNodes = {};
     for (size_t i = 0; i < torch::getNumGPUs(); i++) {
       devices.push_back(torch::Device(torch::kCUDA, i));
-      models.push_back(DNN());
-      rootNodes.push_back(createRoot());
     }
   }
 
-  torch::NoGradGuard no_grad;
   ctpl::thread_pool pool(PARALLEL_GAMES);
-  std::vector<Node *> roots;
+
+  std::vector<std::unique_ptr<DNN>> models;
+  models.reserve(PARALLEL_GAMES);
 
   for (size_t i = 0; i < PARALLEL_GAMES; i++) {
-    Node *root = createRoot();
-    roots.push_back(root);
+    pool.push([i, &devices](int) {
+      Node *root = createRoot();
+      DNN model = DNN();
+      torch::NoGradGuard no_grad;
 
-    DNN &model = models[i % devices.size()];
-    model->eval();
-    auto function = [&](int id) {
-      (void)id;
-      playGame(root, model, devices[i % devices.size()]);
-    };
-    pool.push(function);
+      auto device = devices[i % devices.size()];
+      playGame(root, model, device);
+    });
   }
 
   return 0;
