@@ -12,17 +12,9 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <unordered_map>
 #include <vector>
 
 Node *transpositionTable[TABLE_SIZE] = {};
-std::unordered_map<uint64_t, Node *> tree;
-struct Batch {
-  std::vector<torch::Tensor> nnInputs;
-  std::vector<Node *> nodes;
-};
-uint32_t currBatchNum = 0;
-Batch batch;
 
 struct Statistics {
   float *totalValue;
@@ -32,9 +24,9 @@ struct Statistics {
       : totalValue(_totalValue), visitCount(_visitCount) {}
 };
 
-Statistics getTreeStats(Node *node, bool isBatch) {
-  if (node->batchNum < currBatchNum) {
-    node->batchNum = currBatchNum;
+Statistics getTreeStats(Node *node, bool isBatch, GlobalData &g) {
+  if (node->batchNum < g.currBatchNum) {
+    node->batchNum = g.currBatchNum;
     node->batch_totalValue = node->totalValue;
     node->batch_visitCount = node->visitCount;
   }
@@ -207,9 +199,9 @@ float policyIndex(Position &board, Move move) {
   return move.from() * 73 + moveType;
 }
 
-void updateStatistics(float res, Node *node, Node *childNode, bool batch) {
-  Statistics parentStats = getTreeStats(node, batch);
-  Statistics childStats = getTreeStats(childNode, batch);
+void updateStatistics(float res, Node *node, Node *childNode, bool batch, GlobalData &g) {
+  Statistics parentStats = getTreeStats(node, batch, g);
+  Statistics childStats = getTreeStats(childNode, batch, g);
 
   if (res != UNKNOWN) {
     *parentStats.totalValue += res;
@@ -219,10 +211,10 @@ void updateStatistics(float res, Node *node, Node *childNode, bool batch) {
   }
 }
 
-void updateStatisticsGet(float res, Node *node, Node *childNode, bool batch) {
+void updateStatisticsGet(float res, Node *node, Node *childNode, bool batch, GlobalData &g) {
   if (res == UNKNOWN) {
-    Statistics parentStats = getTreeStats(node, batch);
-    Statistics childStats = getTreeStats(childNode, batch);
+    Statistics parentStats = getTreeStats(node, batch, g);
+    Statistics childStats = getTreeStats(childNode, batch, g);
     float mean;
     if (*childStats.visitCount == 0) {
       mean = FPU;
@@ -235,11 +227,12 @@ void updateStatisticsGet(float res, Node *node, Node *childNode, bool batch) {
     *parentStats.totalValue += VL * mean;
     *parentStats.visitCount += VL;
   } else {
-    updateStatistics(res, node, childNode, batch);
+    updateStatistics(res, node, childNode, batch, g);
   }
 }
 
-float batchPUCT(Node *node, bool getBatch) {
+float batchPUCT(Node *node, bool getBatch, GlobalData &g) {
+  Batch& batch = g.batch;
   if (isTerminal(node->position)) {
     return terminalValue(node->position);
   }
@@ -260,8 +253,8 @@ float batchPUCT(Node *node, bool getBatch) {
   Node *selected = nullptr;
 
   for (Node *childNode : node->children) {
-    Statistics childStats = getTreeStats(childNode, getBatch);
-    Statistics nodeStats = getTreeStats(node, getBatch);
+    Statistics childStats = getTreeStats(childNode, getBatch, g);
+    Statistics nodeStats = getTreeStats(node, getBatch, g);
     float mean = FPU;
 
     if (*childStats.visitCount > 0) {
@@ -280,18 +273,20 @@ float batchPUCT(Node *node, bool getBatch) {
     }
   }
 
-  float res = batchPUCT(selected, getBatch);
+  float res = batchPUCT(selected, getBatch, g);
 
-  updateStatisticsGet(res, node, selected, getBatch);
+  updateStatisticsGet(res, node, selected, getBatch, g);
   if (res != UNKNOWN) {
     return -res;
   }
   return UNKNOWN;
 }
 
-void getBatch(Node *node) {
+void getBatch(Node *node, GlobalData &g) {
+  Batch &batch = g.batch;
+
   for (int i = 0; i < 32; i++) {
-    batchPUCT(node, true);
+    batchPUCT(node, true, g);
     if (batch.nodes.size() >= 2 &&
         batch.nodes[batch.nodes.size() - 1]->position.hash() ==
             batch.nodes[batch.nodes.size() - 2]->position.hash()) {
@@ -300,9 +295,13 @@ void getBatch(Node *node) {
       break;
     }
   }
+
 }
 
-void putBatch(Node *node, std::vector<Node *> &nodes, Eval &outputs) {
+void putBatch(Node *node, Eval &outputs, GlobalData& g) {
+  Batch &batch = g.batch;
+  std::vector<Node*> &nodes = batch.nodes;
+
   for (size_t i = 0; i < nodes.size(); i++) {
     for (Move move : createMovelistVec(nodes[i]->position)) {
       Midnight::Position newBoard(nodes[i]->position);
@@ -325,7 +324,7 @@ void putBatch(Node *node, std::vector<Node *> &nodes, Eval &outputs) {
   batch.nodes = {};
 
   while (true) {
-    float result = batchPUCT(node, false);
+    float result = batchPUCT(node, false, g);
 
     if (result == UNKNOWN) {
       break;
@@ -333,11 +332,19 @@ void putBatch(Node *node, std::vector<Node *> &nodes, Eval &outputs) {
   }
 }
 
-Node *getNextMove(Node *node, DNN &model, torch::Device &device, float temperature) {
+Node *getNextMove(Node *node, DNN &model, torch::Device device,
+                  float temperature, GlobalData &g) {
+  Batch &batch = g.batch;
+
   for (int i = 0; i < SIMULATIONS;) {
-    getBatch(node);
-    torch::Tensor batchedInput = torch::zeros(
-        {static_cast<long>(batch.nnInputs.size()), INPUT_PLANES, 8, 8}).to(device);
+    getBatch(node, g);
+    if (batch.nnInputs.size() == 0) {
+      continue;
+    }
+    torch::Tensor batchedInput =
+        torch::zeros(
+            {static_cast<long>(batch.nnInputs.size()), INPUT_PLANES, 8, 8})
+            .to(device);
     for (size_t j = 0; j < batch.nnInputs.size(); j++) {
       batchedInput[j] = batch.nnInputs[j].to(device);
     }
@@ -345,9 +352,9 @@ Node *getNextMove(Node *node, DNN &model, torch::Device &device, float temperatu
     i += batch.nnInputs.size();
 
     Eval outputs = model->forward(batchedInput);
-    putBatch(node, batch.nodes, outputs);
+    putBatch(node, outputs, g);
+    g.currBatchNum += 1;
   }
-
 
   float total = 0;
   for (Node *child : node->children) {

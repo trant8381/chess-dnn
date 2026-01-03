@@ -14,6 +14,19 @@
 #include <torch/torch.h>
 #include "constants.h"
 
+// the return struct on a forward pass of the whole model.
+struct Eval {
+  torch::Tensor value;
+  torch::Tensor policy;
+  bool initialized = false;
+  Eval();
+  Eval(torch::Tensor _value, torch::Tensor _policy) {
+    value = _value;
+    policy = _policy;
+    initialized = true;
+  }
+};
+
 class ConvBlockImpl : public torch::nn::Module {
 private:
   torch::nn::Conv2d conv;

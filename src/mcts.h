@@ -48,5 +48,15 @@ struct Node {
   }
 };
 
-Node *getNextMove(Node *node, DNN &model, torch::Device &device, float temperature);
+struct Batch {
+  std::vector<torch::Tensor> nnInputs;
+  std::vector<Node *> nodes;
+};
+
+struct GlobalData {
+  uint32_t currBatchNum = 0;
+  Batch batch = {};
+};
+
+Node *getNextMove(Node *node, DNN &model, torch::Device device, float temperature, GlobalData &g);
 bool isTerminal(Midnight::Position &board);
