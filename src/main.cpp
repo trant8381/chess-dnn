@@ -35,6 +35,7 @@ void playGame(Node *root, DNN &model, torch::Device device) {
     root = selected;
 
     temperature = std::pow(temperature + 1, TEMPERATURE_DECAY);
+
     std::cout << root->position << std::endl;
   }
 
@@ -49,28 +50,24 @@ Node *createRoot() {
 }
 
 int main() {
-  std::vector<torch::Device> devices = {torch::kCPU};
   std::vector<Node *> rootNodes = {createRoot()};
-
-  if (torch::cuda::is_available()) {
-    devices = {};
-    for (size_t i = 0; i < torch::getNumGPUs(); i++) {
-      devices.push_back(torch::Device(torch::kCUDA, i));
-    }
-  }
-
   ctpl::thread_pool pool(PARALLEL_GAMES);
 
   std::vector<std::unique_ptr<DNN>> models;
   models.reserve(PARALLEL_GAMES);
 
   for (size_t i = 0; i < PARALLEL_GAMES; i++) {
-    pool.push([i, &devices](int) {
+    pool.push([i](int) {
       Node *root = createRoot();
+      torch::Device device = torch::kCPU;
+      if (torch::cuda::is_available()) {
+        device = torch::Device(torch::kCUDA, i % torch::getNumGPUs());
+      }
+
       DNN model = DNN();
       torch::NoGradGuard no_grad;
+      model->to(device);
 
-      auto device = devices[i % devices.size()];
       playGame(root, model, device);
     });
   }
