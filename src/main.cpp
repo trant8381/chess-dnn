@@ -15,14 +15,14 @@ struct State {
   float value;
 };
 
-void playGame(Node *root, DNN &model, torch::Device device) {
-  GlobalData g;
+void playGame(Node *root, DNN &model, const torch::Device device) {
+  GlobalData g = GlobalData(device);
   while (true) {
     if (isTerminal(root->position)) {
       break;
     }
     float temperature = 1.0f;
-    Node *selected = getNextMove(root, model, device, temperature, g);
+    Node *selected = getNextMove(root, model, temperature, g);
 
     for (Node *node : root->children) {
       if (node != selected) {
@@ -50,12 +50,7 @@ Node *createRoot() {
 }
 
 int main() {
-  std::vector<Node *> rootNodes = {createRoot()};
   ctpl::thread_pool pool(PARALLEL_GAMES);
-
-  std::vector<std::unique_ptr<DNN>> models;
-  models.reserve(PARALLEL_GAMES);
-
   for (size_t i = 0; i < PARALLEL_GAMES; i++) {
     pool.push([i](int) {
       Node *root = createRoot();

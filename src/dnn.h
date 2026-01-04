@@ -164,15 +164,6 @@ public:
 
     return Eval(valueHead->forward(state), policyHead->forward(state));
   }
-
-  std::vector<Eval> batchForward(const torch::Tensor &x) {
-    std::vector<Eval> evals;
-    for (int i = 0; i < x.size(0); i++) {
-      evals.push_back(this->forward(x[i].unsqueeze(0)));
-    }
-
-    return evals;
-  }
 };
 
 TORCH_MODULE(DNN);

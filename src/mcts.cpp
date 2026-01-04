@@ -145,21 +145,6 @@ float terminalValue(Midnight::Position &board) {
   return 0.0f;
 }
 
-// creates an array of the history boards.
-std::array<Position, HISTORY_BOARDS> constructHistory(Node *node) {
-  std::array<Position, HISTORY_BOARDS> history = {
-      Position(START_FEN), Position(START_FEN), Position(START_FEN),
-      Position(START_FEN)};
-
-  const Node *current = node;
-  for (int i = 0; i < 4 && current != nullptr; i++) {
-    history[i] = current->position;
-    current = current->parent;
-  }
-
-  return history;
-}
-
 static const int KDX[8] = {1, 2, 2, 1, -1, -2, -2, -1};
 static const int KDY[8] = {2, 1, -1, -2, -2, -1, 1, 2};
 
@@ -240,8 +225,9 @@ float batchPUCT(Node *node, bool getBatch, GlobalData &g) {
   if (!node->initialized) {
     if (getBatch) {
       batch.nodes.push_back(node);
-      batch.nnInputs.push_back(
-          createState(constructHistory(node), torch::kCPU));
+      if (g.device == torch::kCPU) {
+        batch.nnInputs.push_back(createState(constructHistory(node), g.device));
+      }
     } else if (node->valueEval != INFINITY) {
       node->initialized = true;
       return node->valueEval;
@@ -291,7 +277,9 @@ void getBatch(Node *node, GlobalData &g) {
         batch.nodes[batch.nodes.size() - 1]->position.hash() ==
             batch.nodes[batch.nodes.size() - 2]->position.hash()) {
       batch.nodes.pop_back();
-      batch.nnInputs.pop_back();
+      if (g.device == torch::kCPU) {
+        batch.nnInputs.pop_back();
+      }
       break;
     }
   }
@@ -330,24 +318,28 @@ void putBatch(Node *node, Eval &outputs, GlobalData &g) {
   }
 }
 
-Node *getNextMove(Node *node, DNN &model, torch::Device device,
-                  float temperature, GlobalData &g) {
+Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g) {
   Batch &batch = g.batch;
 
   for (int i = 0; i < SIMULATIONS;) {
     getBatch(node, g);
-    if (batch.nnInputs.size() == 0) {
+    if (batch.nodes.size() == 0) {
       continue;
     }
-    torch::Tensor batchedInput =
-        torch::zeros(
-            {static_cast<long>(batch.nnInputs.size()), INPUT_PLANES, 8, 8})
-            .to(device);
-    for (size_t j = 0; j < batch.nnInputs.size(); j++) {
-      batchedInput[j] = batch.nnInputs[j].to(device);
+
+    torch::Tensor batchedInput;
+    if (g.device == torch::kCPU) {
+      batchedInput = torch::zeros({static_cast<long>(batch.nnInputs.size()),
+                                   INPUT_PLANES, 8, 8})
+                         .to(g.device);
+      for (size_t j = 0; j < batch.nnInputs.size(); j++) {
+        batchedInput[j] = batch.nnInputs[j].to(g.device);
+      }
+    } else {
+      batchedInput = createStateFast(batch.nodes, g.device);
     }
 
-    i += batch.nnInputs.size();
+    i += batch.nodes.size();
 
     Eval outputs = model->forward(batchedInput);
     putBatch(node, outputs, g);
