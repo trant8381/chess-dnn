@@ -30,7 +30,7 @@ add_executable (main ${MAIN_SRC})
 target_include_directories(main PRIVATE ${SRC}/include)
 
 # ------------------ CUDA Settings ------------------
-if ((DEFINED ENV{CMAKE_CUDA_COMPILER}) AND (CMAKE_CUDA_COMPILER))
+if (CMAKE_CUDA_COMPILER)
   set(CUDA_SOURCES "${SRC}")
   file(GLOB CUDA_SRC
      "${CUDA_SOURCES}/*.cu"
