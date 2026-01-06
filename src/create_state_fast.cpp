@@ -1,7 +1,7 @@
 #include "create_state_fast.h"
-#include "move_gen.h"
 #include "arange.cuh"
 #include "batch_and_ne.cuh"
+#include "move_gen.h"
 #include "sq.cuh"
 #include <c10/core/ScalarType.h>
 #include <torch/torch.h>
@@ -49,10 +49,14 @@ NNInputBatch constructHistoryFast(std::vector<Node *> nodes) {
     scalars.push_back(
         {board.fifty_move_rule() / 100.0f, board.moves() / 100.0f,
          static_cast<float>(board.turn()),
-         static_cast<float>(board.king_and_oo_rook_not_moved<Midnight::WHITE>()),
-         static_cast<float>(board.king_and_ooo_rook_not_moved<Midnight::WHITE>()),
-         static_cast<float>(board.king_and_oo_rook_not_moved<Midnight::BLACK>()),
-         static_cast<float>(board.king_and_ooo_rook_not_moved<Midnight::BLACK>())});
+         static_cast<float>(
+             board.king_and_oo_rook_not_moved<Midnight::WHITE>()),
+         static_cast<float>(
+             board.king_and_ooo_rook_not_moved<Midnight::WHITE>()),
+         static_cast<float>(
+             board.king_and_oo_rook_not_moved<Midnight::BLACK>()),
+         static_cast<float>(
+             board.king_and_ooo_rook_not_moved<Midnight::BLACK>())});
   }
 
   return input;
@@ -72,10 +76,10 @@ torch::Tensor createStateFast(const std::vector<Node *> &nodes,
   torch::Tensor binPlanes =
       torch::empty({B, 14, 8, 8},
                    torch::TensorOptions().dtype(torch::kFloat).device(device));
-  
-  uint64_t* maskPtr = mask.data_ptr<uint64_t>();
-  uint64_t* batchPtr = batch.data_ptr<uint64_t>();
-  float* binPlanesPtr = binPlanes.data_ptr<float>();
+
+  uint64_t *maskPtr = mask.data_ptr<uint64_t>();
+  uint64_t *batchPtr = batch.data_ptr<uint64_t>();
+  float *binPlanesPtr = binPlanes.data_ptr<float>();
 
   arange(64, maskPtr);
   sq(64, maskPtr);

@@ -16,7 +16,9 @@ set(MAIN_PATH "${CMAKE_SOURCE_DIR}") # ------- Makes source dir
 set(CMAKE_PREFIX_PATH "${MAIN_PATH}/external/libtorch")
 set(SRC "${MAIN_PATH}/src")
 file(GLOB MAIN_SRC
-     "${SRC}/*.cpp"
+     "${SRC}/create_state.cpp"
+     "${SRC}/mcts.cpp"
+     "${SRC}/main.cpp"
 )
 
 # ------------------ Torch Settings ------------------
@@ -32,12 +34,12 @@ if ((DEFINED ENV{CMAKE_CUDA_COMPILER}) AND (CMAKE_CUDA_COMPILER))
   set(CUDA_SOURCES "${SRC}")
   file(GLOB CUDA_SRC
      "${CUDA_SOURCES}/*.cu"
+     "${SRC}/create_state_fast.cpp"
   )
 
   enable_language(CUDA)
   cuda_add_library(cuda_uint64 STATIC CUDA_SRC)
   target_include_directories(cuda_uint64 PRIVATE ${CUDA_SOURCES}/include)
-  target_include_directories(main PRIVATE ${CUDA_SOURCES}/include)
   set_target_properties(cuda_uint64
                         PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
   target_link_libraries(main PRIVATE ${TORCH_LIBRARIES} cuda_uint64)

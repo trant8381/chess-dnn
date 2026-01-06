@@ -1,5 +1,4 @@
 #include "constants.h"
-#include "create_state.h"
 #include "ctpl.h"
 #include "dnn.h"
 #include "mcts.h"
