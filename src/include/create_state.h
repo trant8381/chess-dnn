@@ -18,4 +18,4 @@ std::array<Position, HISTORY_BOARDS> constructHistory(Node *node);
 torch::Tensor createState(const std::array<Position, HISTORY_BOARDS> &boards,
                           const torch::Device &device);
 Histories constructHistoryFast(Node *node);
-torch::Tensor createStateFast(const std::vector<Node*> node, const torch::Device &device);
+torch::Tensor createStateFast(const std::vector<Node*> &nodes, const torch::Device &device);

@@ -1,4 +1,5 @@
 #include "constants.h"
+#include "create_state.h"
 #include "ctpl.h"
 #include "dnn.h"
 #include "mcts.h"
@@ -50,22 +51,26 @@ Node *createRoot() {
 }
 
 int main() {
-  ctpl::thread_pool pool(PARALLEL_GAMES);
-  for (size_t i = 0; i < PARALLEL_GAMES; i++) {
-    pool.push([i](int) {
-      Node *root = createRoot();
-      torch::Device device = torch::kCPU;
-      if (torch::cuda::is_available()) {
-        device = torch::Device(torch::kCUDA, i % torch::getNumGPUs());
-      }
+  // ctpl::thread_pool pool(PARALLEL_GAMES);
+  // for (size_t i = 0; i < PARALLEL_GAMES; i++) {
+  //   pool.push([i](int) {
+  //     Node *root = createRoot();
+  //     torch::Device device = torch::kCPU;
+  //     if (torch::cuda::is_available()) {
+  //       device = torch::Device(torch::kCUDA, i % torch::getNumGPUs());
+  //     }
 
-      DNN model = DNN();
-      torch::NoGradGuard no_grad;
-      model->to(device);
+  //     DNN model = DNN();
+  //     torch::NoGradGuard no_grad;
+  //     model->to(device);
 
-      playGame(root, model, device);
-    });
-  }
+  //     playGame(root, model, device);
+  //   });
+  // }
+  
+  Node position = Node(nullptr, {}, Position(START_FEN));
+  std::vector<Node*> nodes = {&position};
+  createStateFast(nodes, torch::kCPU);
 
   return 0;
 }

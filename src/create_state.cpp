@@ -137,28 +137,33 @@ NNInputBatch constructHistoryFast(std::vector<Node *> nodes) {
   return input;
 }
 
-torch::Tensor createStateFast(const std::vector<Node *> nodes,
+torch::Tensor createStateFast(const std::vector<Node *> &nodes,
                               const torch::Device &device) {
   NNInputBatch input = constructHistoryFast(nodes);
-  long numBatches = nodes.size();
+  const long B = nodes.size();
+
   torch::Tensor bb =
-      torch::from_blob((void *)input.histories.data(), {HISTORY_BOARDS * 14},
+      torch::from_blob((void *)input.histories.data(), {B, HISTORY_BOARDS * 14},
                        torch::TensorOptions().dtype(torch::kUInt64))
           .to(device)
           .unsqueeze(2);
-  std::cout << bb << std::endl;
-  torch::Tensor squares = torch::arange(
-      64, torch::TensorOptions().device(device).dtype(torch::kUInt64));
-  torch::Tensor bin_planes = (torch::bitwise_right_shift(bb, squares) & 1)
-                                 .to(torch::kFloat)
-                                 .view({numBatches, HISTORY_BOARDS * 14, 8, 8});
 
-  auto scalar_vals =
-      torch::from_blob(input.scalars.data(), {7},
+  static torch::Tensor squares = torch::arange(
+      64, torch::TensorOptions().dtype(torch::kInt64).device(device));
+
+  torch::Tensor shifted = torch::bitwise_right_shift(bb, squares);
+  torch::Tensor bits = torch::bitwise_and(shifted, torch::ones_like(shifted));
+
+  torch::Tensor bin_planes =
+      bits.to(torch::kFloat).view({B, HISTORY_BOARDS * 14, 8, 8});
+
+  torch::Tensor scalar_vals =
+      torch::from_blob(input.scalars.data(), {B, 7},
                        torch::TensorOptions().dtype(torch::kFloat))
           .to(device);
+
   torch::Tensor scalar_planes =
-      scalar_vals.view({numBatches, 7, 1, 1}).expand({numBatches, 7, 64, 64});
+      scalar_vals.view({B, 7, 1, 1}).expand({B, 7, 8, 8});
 
   return torch::cat({bin_planes, scalar_planes}, 1);
 }

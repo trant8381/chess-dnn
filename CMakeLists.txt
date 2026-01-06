@@ -15,27 +15,35 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(MAIN_PATH "${CMAKE_SOURCE_DIR}") # ------- Makes source dir
 set(CMAKE_PREFIX_PATH "${MAIN_PATH}/external/libtorch")
 set(SRC "${MAIN_PATH}/src")
+file(GLOB MAIN_SRC
+     "${SRC}/*.cpp"
+)
 
 # ------------------ Torch Settings ------------------
 include_directories("${MAIN_PATH}/external/libtorch")
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-add_executable (main "${SRC}/main.cpp"
-                     "${SRC}/create_state.cpp"
-                     "${SRC}/mcts.cpp")
-target_link_libraries(main ${TORCH_LIBRARIES})
-target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
+add_executable (main ${MAIN_SRC})
+target_include_directories(main PRIVATE ${SRC}/include)
 
-# -------------------- REMOVE WINDOWS ERRORS --------------------
-# The following code block is suggested to be used on Windows.
-# According to https://github.com/pytorch/pytorch/issues/25457,
-# the DLLs need to be copied to avoid memory errors.
-if (MSVC)
-        file(GLOB TORCH_DLLS "${TORCH_INSTALL_PREFIX}/lib/*.dll")
-        add_custom_command(TARGET main 
-                        POST_BUILD
-                        COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                        ${TORCH_DLLS}
-                        $<TARGET_FILE_DIR:main>)
-endif (MSVC)
+# ------------------ CUDA Settings ------------------
+if ((DEFINED ENV{CMAKE_CUDA_COMPILER}) AND (CMAKE_CUDA_COMPILER))
+  set(CUDA_SOURCES "${SRC}/cuda")
+  file(GLOB CUDA_SRC
+     "${CUDA_SOURCES}/*.cu"
+  )
+
+  enable_language(CUDA)
+  cuda_add_library(cuda_uint64 STATIC CUDA_SRC)
+  target_include_directories(cuda_uint64 PRIVATE ${CUDA_SOURCES}/include)
+  set_target_properties(cuda_uint64
+                        PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  target_link_libraries(main PRIVATE ${TORCH_LIBRARIES} cuda_uint64)
+  set_property(TARGET main
+               PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+  target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
+else()
+  target_link_libraries(main ${TORCH_LIBRARIES})
+  target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
+endif()
