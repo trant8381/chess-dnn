@@ -29,7 +29,7 @@ target_include_directories(main PRIVATE ${SRC}/include)
 
 # ------------------ CUDA Settings ------------------
 if ((DEFINED ENV{CMAKE_CUDA_COMPILER}) AND (CMAKE_CUDA_COMPILER))
-  set(CUDA_SOURCES "${SRC}/cuda")
+  set(CUDA_SOURCES "${SRC}")
   file(GLOB CUDA_SRC
      "${CUDA_SOURCES}/*.cu"
   )
@@ -37,6 +37,7 @@ if ((DEFINED ENV{CMAKE_CUDA_COMPILER}) AND (CMAKE_CUDA_COMPILER))
   enable_language(CUDA)
   cuda_add_library(cuda_uint64 STATIC CUDA_SRC)
   target_include_directories(cuda_uint64 PRIVATE ${CUDA_SOURCES}/include)
+  target_include_directories(main PRIVATE ${CUDA_SOURCES}/include)
   set_target_properties(cuda_uint64
                         PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
   target_link_libraries(main PRIVATE ${TORCH_LIBRARIES} cuda_uint64)

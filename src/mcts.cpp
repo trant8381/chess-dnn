@@ -13,6 +13,9 @@
 #include <cstdint>
 #include <cstdlib>
 #include <vector>
+#ifdef __CUDACC__
+#include "create_state_fast.h"
+#endif
 
 struct Statistics {
   float *totalValue;
@@ -336,7 +339,9 @@ Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g) {
         batchedInput[j] = batch.nnInputs[j].to(g.device);
       }
     } else {
+#ifdef __CUDACC__
       batchedInput = createStateFast(batch.nodes, g.device);
+#endif
     }
 
     i += batch.nodes.size();

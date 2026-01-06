@@ -22,3 +22,5 @@ constexpr float TEMPERATURE_DECAY = -0.42f; // the exponent for temperature.
 constexpr int PARALLEL_GAMES =
     2; // the number of games to be run in parallel during data collection.
 const Midnight::Position START_POS = Midnight::Position(Midnight::START_FEN);
+
+typedef std::vector<std::array<uint64_t, HISTORY_BOARDS * 14>> Histories;
