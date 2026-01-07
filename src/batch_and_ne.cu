@@ -1,4 +1,4 @@
-#include "batch_and_ne.h"
+#include "batch_and_ne.cuh"
 #include "constants.h"
 #include "handle_error.cuh"
 #include <cuda_runtime.h>

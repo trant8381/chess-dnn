@@ -1,4 +1,4 @@
-#include "arange.h"
+#include "arange.cuh"
 #include "handle_error.cuh"
 #include <cuda_runtime.h>
 

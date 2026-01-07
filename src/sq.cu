@@ -1,5 +1,5 @@
 #include "handle_error.cuh"
-#include "sq.h"
+#include "sq.cuh"
 #include <cuda_runtime.h>
 
 __global__ void sq_kernel(int n, uint64_t *input) {
