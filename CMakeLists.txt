@@ -10,6 +10,16 @@ enable_language(C)
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+include(CheckLanguage)
+
+check_language(CUDA)
+
+if (CMAKE_CUDA_COMPILER)
+    enable_language(CUDA)
+    set(HAS_CUDA TRUE)
+else()
+    set(HAS_CUDA FALSE)
+endif()
 
 # ------------------ Path Settings ------------------
 set(MAIN_PATH "${CMAKE_SOURCE_DIR}") # ------- Makes source dir
@@ -30,22 +40,27 @@ add_executable (main ${MAIN_SRC})
 target_include_directories(main PRIVATE ${SRC}/include)
 
 # ------------------ CUDA Settings ------------------
-if (CMAKE_CUDA_COMPILER)
+if (CMAKE_CUDA_COMPILER_LOADED)
   set(CUDA_SOURCES "${SRC}")
   file(GLOB CUDA_SRC
      "${CUDA_SOURCES}/*.cu"
      "${SRC}/create_state_fast.cpp"
   )
-
-  enable_language(CUDA)
-  cuda_add_library(cuda_uint64 STATIC ${CUDA_SRC})
+  add_library(cuda_uint64 STATIC ${CUDA_SRC})
   target_compile_features(cuda_uint64 PUBLIC cxx_std_20)
   target_include_directories(cuda_uint64 PUBLIC ${CUDA_SOURCES}/include)
-  set_target_properties(cuda_uint64
-                        PROPERTIES CUDA_SEPARABLE_COMPILATION ON)
+  target_link_libraries(cuda_uint64 PUBLIC
+      ${TORCH_LIBRARIES}
+  )
+  set_target_properties(cuda_uint64 PROPERTIES
+      CUDA_SEPARABLE_COMPILATION ON
+      CUDA_STANDARD 20
+  )
+
   target_link_libraries(main PRIVATE ${TORCH_LIBRARIES} cuda_uint64)
   set_property(TARGET main
                PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+  target_compile_definitions(main PUBLIC HAS_CUDA)
   target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
 else()
   target_link_libraries(main ${TORCH_LIBRARIES})

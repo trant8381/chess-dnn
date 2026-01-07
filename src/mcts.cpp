@@ -13,7 +13,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <vector>
-#ifdef __CUDACC__
+#ifdef HAS_CUDA
 #include "create_state_fast.h"
 #endif
 
@@ -339,7 +339,7 @@ Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g) {
         batchedInput[j] = batch.nnInputs[j].to(g.device);
       }
     } else {
-#ifdef __CUDACC__
+#ifdef HAS_CUDA
       batchedInput = createStateFast(batch.nodes, g.device);
 #endif
     }

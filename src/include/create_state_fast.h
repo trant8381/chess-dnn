@@ -1,4 +1,4 @@
-#include "mcts.h"
+#include "node.h"
 #include "move_gen.h"
 #include "constants.h"
 #include <torch/torch.h>

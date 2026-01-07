@@ -74,7 +74,7 @@ torch::Tensor createStateFast(const std::vector<Node *> &nodes,
   torch::Tensor mask =
       torch::empty(64, torch::TensorOptions().dtype(torch::kUInt64)).to(device);
   torch::Tensor binPlanes =
-      torch::empty({B, 14, 8, 8},
+      torch::empty({B, HISTORY_BOARDS * 14, 8, 8},
                    torch::TensorOptions().dtype(torch::kFloat).device(device));
 
   uint64_t *maskPtr = mask.data_ptr<uint64_t>();
@@ -84,7 +84,6 @@ torch::Tensor createStateFast(const std::vector<Node *> &nodes,
   arange(64, maskPtr);
   sq(64, maskPtr);
   batch_and_ne(1, maskPtr, batchPtr, binPlanesPtr);
-
   torch::Tensor scalar_vals =
       torch::from_blob(input.scalars.data(), {B, 7},
                        torch::TensorOptions().dtype(torch::kFloat))
