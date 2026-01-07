@@ -1,4 +1,4 @@
-#include "handle_error.h"
+#include "handle_error.cuh"
 #include "sq.h"
 #include <cuda_runtime.h>
 

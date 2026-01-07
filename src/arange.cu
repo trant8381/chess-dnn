@@ -1,5 +1,5 @@
 #include "arange.h"
-#include "handle_error.h"
+#include "handle_error.cuh"
 #include <cuda_runtime.h>
 
 __global__ void arange_kernel(uint64_t *arr, int n, float start, float step) {

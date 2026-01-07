@@ -1,6 +1,6 @@
 #include "batch_and_ne.h"
 #include "constants.h"
-#include "handle_error.h"
+#include "handle_error.cuh"
 #include <cuda_runtime.h>
 
 __global__ void batch_and_ne_kernel(int numBatches, uint64_t *mask,
