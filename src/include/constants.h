@@ -3,7 +3,6 @@
 #include "move_gen.h"
 #include <cmath>
 #include <cstdint>
-#include <torch/torch.h>
 
 constexpr int HISTORY_BOARDS = 4; // model's amount of history positions stored.
 constexpr int INPUT_PLANES =
