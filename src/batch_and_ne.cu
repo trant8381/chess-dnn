@@ -13,7 +13,7 @@ __global__ void batch_and_ne_kernel(int numBatches, uint64_t *mask,
 
 void batch_and_ne(int numBatches, uint64_t *mask, uint64_t *batch,
                   float *result) {
-  int blockSize = 64;
+  int blockSize = 512;
   int numBlocks =
       (numBatches * HISTORY_BOARDS * 14 * 8 * 8 + blockSize - 1) / blockSize;
   batch_and_ne_kernel<<<numBlocks, blockSize>>>(numBatches, mask, batch,
