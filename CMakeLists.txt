@@ -45,6 +45,7 @@ if (CMAKE_CUDA_COMPILER_LOADED)
   file(GLOB CUDA_SRC
      "${CUDA_SOURCES}/*.cu"
      "${SRC}/create_state_fast.cpp"
+     "${SRC}/evaluate.cpp"
   )
   add_library(cuda_uint64 STATIC ${CUDA_SRC})
   target_compile_features(cuda_uint64 PUBLIC cxx_std_20)

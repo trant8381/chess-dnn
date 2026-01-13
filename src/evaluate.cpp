@@ -13,12 +13,14 @@ void evaluate(ConcurrentQueue<Node *> &q, DNN &model,
   batch.reserve(q.size_approx());
   q.try_dequeue_bulk(batch.begin(), q.size_approx());
 
-  // #if HAS_CUDA
+  #if HAS_CUDA
   torch::Tensor state = createStateFast(batch, torch::kCUDA);
   Eval outputs = model->forward(state);
-
+  
   for (Node *node : batch) {
-    putBatch(node, outputs, *g[node->threadIndex]);
+    GlobalData* data = g[node->threadIndex];
+    putBatch(node, outputs, *data);
+    data->simulation += 1;
   }
-  // #endif
+  #endif
 }
