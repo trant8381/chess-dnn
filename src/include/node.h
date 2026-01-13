@@ -1,9 +1,12 @@
+#pragma once
+
 #include <cmath>
 #include <set>
 #include "move_gen.h"
 
 // one node in the mcts game tree.
 struct Node {
+  int threadIndex;
   Node *parent;
   std::set<Node *> children;
   Midnight::Position position;

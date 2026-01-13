@@ -302,15 +302,13 @@ void putBatch(Node *node, Eval &outputs, GlobalData &g) {
                    outputs.policy[i][policyIndex(nodes[i]->position, move)]
                        .item()
                        .toFloat());
+      childNode->threadIndex = node->threadIndex;
 
       nodes[i]->children.insert(childNode);
     }
 
     nodes[i]->valueEval = outputs.value[i].item().toFloat();
   }
-
-  batch.nnInputs = {};
-  batch.nodes = {};
 
   while (true) {
     float result = batchPUCT(node, false, g);
@@ -324,7 +322,7 @@ void putBatch(Node *node, Eval &outputs, GlobalData &g) {
 Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g) {
   Batch &batch = g.batch;
 
-  for (int i = 0; i < SIMULATIONS;) {
+  while (g.simulation < SIMULATIONS) {
     getBatch(node, g);
     if (batch.nodes.size() == 0) {
       continue;
@@ -338,22 +336,26 @@ Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g) {
       for (size_t j = 0; j < batch.nnInputs.size(); j++) {
         batchedInput[j] = batch.nnInputs[j].to(g.device);
       }
+      g.simulation += batch.nodes.size();
+
+      Eval outputs = model->forward(batchedInput);
+      putBatch(node, outputs, g);
     } else {
-#ifdef HAS_CUDA
-      batchedInput = createStateFast(batch.nodes, g.device);
-#endif
+      #ifdef HAS_CUDA
+      g.q->enqueue_bulk(g.batch.nodes.begin(), g.batch.nodes.size());
+      #endif
     }
-
-    i += batch.nodes.size();
-
-    Eval outputs = model->forward(batchedInput);
-    putBatch(node, outputs, g);
-    g.currBatchNum += 1;
+    batch.nnInputs = {};
+    batch.nodes = {};
   }
+
+  g.currBatchNum += 1;
+  g.simulation = 0;
 
   float total = 0;
   for (Node *child : node->children) {
     total += pow(child->visitCount, 1.0 / temperature);
+    std::cout << child->visitCount << std::endl;
   }
   int i = rand() % static_cast<int>(total);
   float curr = 0;
