@@ -8,12 +8,12 @@
 #include <vector>
 
 // creates an array of the history boards.
-NNInputBatch constructHistoryFast(std::vector<Node *> nodes) {
+NNInputBatch constructHistoryFast(Node** &begin, Node** &end) {
   NNInputBatch input;
   Histories &histories = input.histories;
   std::vector<std::array<float, 7>> &scalars = input.scalars;
 
-  for (Node *node : nodes) {
+  for (const Node *node = *begin; node != *end; node++) {
     std::array<uint64_t, HISTORY_BOARDS * 14> history = {0};
     const Midnight::Position &board = node->position;
     const Node *current = node;
@@ -62,10 +62,10 @@ NNInputBatch constructHistoryFast(std::vector<Node *> nodes) {
   return input;
 }
 
-torch::Tensor createStateFast(const std::vector<Node *> &nodes,
-                              const torch::Device &device) {
-  NNInputBatch input = constructHistoryFast(nodes);
-  const long B = nodes.size();
+torch::Tensor createStateFast(Node** begin, Node** end,
+                              torch::Device &device) {
+  NNInputBatch input = constructHistoryFast(begin, end);
+  const long B = end - begin;
 
   torch::Tensor batch =
       torch::from_blob((void *)input.histories.data(), {B, HISTORY_BOARDS * 14},

@@ -12,6 +12,6 @@ struct NNInputBatch {
   std::vector<std::array<float, 7>> scalars;
 };
 
-Histories constructHistoryFast(Node *node);
-torch::Tensor createStateFast(const std::vector<Node *> &nodes,
-                              const torch::Device &device);
+NNInputBatch constructHistoryFast(Node** &begin, Node** &end);
+torch::Tensor createStateFast(Node** begin, Node** end,
+                              const torch::Device device);

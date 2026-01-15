@@ -85,6 +85,7 @@ int main() {
       std::this_thread::sleep_for(std::chrono::nanoseconds(10000));
     }
   });
+  evaluateThread.join();
   #endif
 
   return 0;
