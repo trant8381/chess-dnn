@@ -57,6 +57,7 @@ if (CMAKE_CUDA_COMPILER_LOADED)
       CUDA_SEPARABLE_COMPILATION ON
       CUDA_STANDARD 20
   )
+  target_compile_definitions(cuda_uint64 PUBLIC HAS_CUDA)
 
   target_link_libraries(main PRIVATE ${TORCH_LIBRARIES} cuda_uint64)
   set_property(TARGET main
