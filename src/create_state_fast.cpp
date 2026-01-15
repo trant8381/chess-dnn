@@ -63,7 +63,7 @@ NNInputBatch constructHistoryFast(Node** &begin, Node** &end) {
 }
 
 torch::Tensor createStateFast(Node** begin, Node** end,
-                              const torch::Device &device) {
+                              const torch::Device device) {
   NNInputBatch input = constructHistoryFast(begin, end);
   const long B = end - begin;
 

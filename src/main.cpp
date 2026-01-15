@@ -79,6 +79,7 @@ int main() {
 
   #if HAS_CUDA
   DNN model = DNN();
+  model->to(torch::kCUDA);
   std::thread evaluateThread = std::thread([&](){
     while (pool.n_idle() != PARALLEL_GAMES) {
       evaluate(q, model, globalData);

@@ -13,23 +13,18 @@ void evaluate(ConcurrentQueue<Node *> &q, DNN &model,
               std::array<GlobalData *, PARALLEL_GAMES> &g) {
   Node* batch[512];
   int sizeApprox = std::min(q.size_approx(), 512UL);
-  q.try_dequeue_bulk(std::begin(batch), sizeApprox);
-  std::cout << "begin batch" << std::endl;
-  for (Node* node: batch) {
-    if (node != nullptr) { 
-      std::cout << node << std::endl;
-    }
+  if (sizeApprox == 0) {
+    return;
   }
+  q.try_dequeue_bulk(std::begin(batch), sizeApprox);
+
   std::cout << std::end(batch) << std::endl;
   #if HAS_CUDA
-  for (Node* node: batch) {
-    std::cout << node->position << std::endl;
-  }
-
   auto begin = std::begin(batch);
   auto end = std::begin(batch) + sizeApprox;
 
   torch::Tensor state = createStateFast(begin, end, torch::kCUDA);
+  std::cout << state << std::endl;
   Eval outputs = model->forward(state);
   
   for (Node *node = *begin; node != *end; node++) {
