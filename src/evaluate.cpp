@@ -19,18 +19,23 @@ void evaluate(ConcurrentQueue<Node *> &q, DNN &model,
   q.try_dequeue_bulk(std::begin(batch), sizeApprox);
 
   std::cout << std::end(batch) << std::endl;
-  #if HAS_CUDA
+  // #if HAS_CUDA
   auto begin = std::begin(batch);
   auto end = std::begin(batch) + sizeApprox;
 
   torch::Tensor state = createStateFast(begin, end, torch::kCUDA);
-  std::cout << state << std::endl;
   Eval outputs = model->forward(state);
   
   for (Node *node = *begin; node != *end; node++) {
     GlobalData* data = g[node->threadIndex];
-    putBatch(node, outputs, *data);
+    data->batch.nodes.push_back(node);
     data->simulation += 1;
   }
-  #endif
+
+  for (GlobalData* data : g) {
+    putBatch(nullptr, outputs, *data);
+    data->simulation += data->batch.nodes.size();
+    data->batch.nodes = {};
+  }
+  // #endif
 }

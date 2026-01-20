@@ -241,6 +241,12 @@ float batchPUCT(Node *node, bool getBatch, GlobalData &g) {
   float bestScore = -INFINITY;
   Node *selected = nullptr;
 
+  while (true) {
+    if (node->childLock.try_lock()) {
+      break;
+    }
+  }
+
   for (Node *childNode : node->children) {
     Statistics childStats = getTreeStats(childNode, getBatch, g);
     Statistics nodeStats = getTreeStats(node, getBatch, g);
@@ -261,6 +267,8 @@ float batchPUCT(Node *node, bool getBatch, GlobalData &g) {
       selected = childNode;
     }
   }
+
+  node->childLock.unlock();
 
   float res = batchPUCT(selected, getBatch, g);
 
@@ -293,6 +301,11 @@ void putBatch(Node *node, Eval &outputs, GlobalData &g) {
   std::vector<Node *> &nodes = batch.nodes;
 
   for (size_t i = 0; i < nodes.size(); i++) {
+    while (true) {
+      if (nodes[i]->childLock.try_lock()) {
+        break;
+      }
+    }
     for (Move move : createMovelistVec(nodes[i]->position)) {
       Midnight::Position newBoard(nodes[i]->position);
       playMove(newBoard, move);
@@ -302,12 +315,13 @@ void putBatch(Node *node, Eval &outputs, GlobalData &g) {
                    outputs.policy[i][policyIndex(nodes[i]->position, move)]
                        .item()
                        .toFloat());
-      childNode->threadIndex = node->threadIndex;
+      childNode->threadIndex = nodes[i]->threadIndex;
 
       nodes[i]->children.insert(childNode);
     }
 
     nodes[i]->valueEval = outputs.value[i].item().toFloat();
+    nodes[i]->childLock.unlock();
   }
 
   while (true) {
@@ -352,6 +366,12 @@ Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g) {
   g.currBatchNum += 1;
   g.simulation = 0;
 
+  while (true) {
+    if (node->childLock.try_lock()) {
+      break;
+    }
+  }
+
   float total = 0;
   for (Node *child : node->children) {
     total += pow(child->visitCount, 1.0 / temperature);
@@ -366,6 +386,8 @@ Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g) {
       return child;
     }
   }
+
+  node->childLock.unlock();
 
   assert(false);
 }

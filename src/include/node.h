@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <mutex>
 #include <set>
 #include "move_gen.h"
 
@@ -9,6 +10,7 @@ struct Node {
   int threadIndex;
   Node *parent;
   std::set<Node *> children;
+  std::mutex childLock;
   Midnight::Position position;
 
   float totalValue = 0;

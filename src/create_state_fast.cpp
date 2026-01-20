@@ -13,7 +13,8 @@ NNInputBatch constructHistoryFast(Node** &begin, Node** &end) {
   Histories &histories = input.histories;
   std::vector<std::array<float, 7>> &scalars = input.scalars;
 
-  for (const Node *node = *begin; node != *end; node++) {
+  for (Node **i = begin; i != end; i++) {
+    Node *node = *i;
     std::array<uint64_t, HISTORY_BOARDS * 14> history = {0};
     const Midnight::Position &board = node->position;
     const Node *current = node;
