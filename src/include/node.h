@@ -1,3 +1,5 @@
+#ifndef NODE_H
+#define NODE_H
 #include <cmath>
 #include <set>
 #include "move_gen.h"
@@ -47,3 +49,5 @@ struct Node {
     }
   }
 };
+
+#endif
