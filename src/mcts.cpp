@@ -15,7 +15,6 @@
 #include <vector>
 #ifdef HAS_CUDA
 #include "create_state_fast.h"
-#include <c10/cuda/CUDAStream.h>
 #endif
 
 struct Statistics {
@@ -341,8 +340,6 @@ Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g) {
       }
     } else {
 #ifdef HAS_CUDA
-      at::cuda::CUDAStream myStream = at::cuda::getStreamFromPool();
-      at::cuda::setCurrentCUDAStream(myStream);
       batchedInput = createStateFast(batch.nodes, g.device);
 #endif
     }

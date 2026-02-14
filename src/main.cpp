@@ -9,6 +9,9 @@
 #include <cstddef>
 #include <torch/cuda.h>
 #include <torch/torch.h>
+#ifdef HAS_CUDA
+#include <c10/cuda/CUDAStream.h>
+#endif
 
 struct State {
   Midnight::Position position;
@@ -59,6 +62,10 @@ int main() {
         device = torch::Device(torch::kCUDA, i % torch::getNumGPUs());
       }
 
+      #ifdef HAS_CUDA
+      at::cuda::CUDAStream myStream = at::cuda::getStreamFromPool();
+      at::cuda::setCurrentCUDAStream(myStream);
+      #endif
       DNN model = DNN();
       torch::NoGradGuard no_grad;
       model->to(device);
