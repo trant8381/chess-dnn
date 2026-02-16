@@ -18,4 +18,4 @@ constexpr float UNKNOWN = INFINITY;         // unknown value for batchPUCT.
 constexpr float VL = 2; // virtual loss value for updating statistics.
 constexpr float TEMPERATURE_DECAY = -0.42f; // the exponent for temperature.
 constexpr int PARALLEL_GAMES =
-    2; // the number of games to be run in parallel during data collection.
+    1; // the number of games to be run in parallel during data collection.

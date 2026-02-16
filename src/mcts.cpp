@@ -39,7 +39,7 @@ Statistics getTreeStats(Node *node, bool isBatch, GlobalData &g) {
 }
 
 // creates a vector of Move with some hacks to get aorund templates.
-std::vector<Midnight::Move> createMovelistVec(Midnight::Position board) {
+std::vector<Midnight::Move> createMovelistVec(Midnight::Position &board) {
   const Midnight::Move *begin;
   const Midnight::Move *end;
   if (board.turn() == Midnight::WHITE) {
@@ -86,6 +86,9 @@ bool insufficientMaterial(Midnight::Position &board) {
     return true;
 
   if ((bn + bb == 1) && (wn + wb == 0))
+    return true;
+
+  if (wn == 1 && bn == 1)
     return true;
 
   // King + bishop vs king + bishop (same color bishops)
@@ -293,17 +296,19 @@ void putBatch(Node *node, Eval &outputs, GlobalData &g) {
   std::vector<Node *> &nodes = batch.nodes;
 
   for (size_t i = 0; i < nodes.size(); i++) {
-    for (Move move : createMovelistVec(nodes[i]->position)) {
-      Midnight::Position newBoard(nodes[i]->position);
-      playMove(newBoard, move);
+    if (nodes[i]->children.size() == 0) {
+      for (Move move : createMovelistVec(nodes[i]->position)) {
+        Midnight::Position newBoard(nodes[i]->position);
+        playMove(newBoard, move);
 
-      Node *childNode =
-          new Node(nodes[i], {}, newBoard,
-                   outputs.policy[i][policyIndex(nodes[i]->position, move)]
-                       .item()
-                       .toFloat());
+        Node *childNode =
+            new Node(nodes[i], {}, newBoard,
+                     outputs.policy[i][policyIndex(nodes[i]->position, move)]
+                         .item()
+                         .toFloat());
 
-      nodes[i]->children.insert(childNode);
+        nodes[i]->children.insert(childNode);
+      }
     }
 
     nodes[i]->valueEval = outputs.value[i].item().toFloat();
@@ -327,6 +332,7 @@ Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g) {
   for (int i = 0; i < SIMULATIONS;) {
     getBatch(node, g);
     if (batch.nodes.size() == 0) {
+      i += 1;
       continue;
     }
 

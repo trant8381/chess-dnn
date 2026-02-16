@@ -6,15 +6,13 @@
 #include <ATen/Context.h>
 #include <c10/core/Device.h>
 #include <c10/core/DeviceType.h>
-#include <chrono>
 #include <cstddef>
+#include <filesystem>
 #include <fstream>
-#include <mutex>
-#include <thread>
+#include <string>
+#include <torch/csrc/autograd/generated/variable_factories.h>
 #include <torch/cuda.h>
 #include <torch/torch.h>
-#include <deque>
-#include <vector>
 #ifdef HAS_CUDA
 #include <c10/cuda/CUDAStream.h>
 #endif
@@ -25,24 +23,27 @@ struct State {
 };
 
 void playGame(Node *root, DNN &model, const torch::Device device, 
-  std::deque<std::vector<std::string>*>& writeQueue, std::mutex& writeQueueLock) {
+  std::ofstream& writeStream) {
   GlobalData g = GlobalData(device);
   int length = 0;
+  
+  std::vector<std::string> visitDistributions;
 
-  while (true) {
+  while (!isTerminal(root->position)) {
     length += 1;
 
-    if (isTerminal(root->position)) {
-      break;
-    }
     float temperature = 1.0f;
     Node *selected = getNextMove(root, model, temperature, g);
-
+    std::string visits;
+    
     for (Node *node : root->children) {
+      visits += std::to_string(node->visitCount) + " ";
       if (node != selected) {
         delete node;
       }
     }
+
+    visitDistributions.push_back(visits);
     root->children.clear();
     root->children.insert(selected);
 
@@ -53,18 +54,13 @@ void playGame(Node *root, DNN &model, const torch::Device device,
     std::cout << root->position << std::endl;
   }
 
-  std::vector<std::string>* fens = new std::vector<std::string>(length);
-
-  while (root) {
-    fens->push_back(root->position.fen());
+  float gameResult = isTerminal(root->position);
+  for (int i = 0; i < length; i++) {
     root = root->parent;
+    writeStream << root->position.fen() << "\t"
+                << visitDistributions[length - i - 1] << "\t"
+                << gameResult << "\n";
   }
-
-  while (writeQueueLock.try_lock()) {
-    std::this_thread::sleep_for(std::chrono::nanoseconds(100));
-  }
-  writeQueue.push_back(fens);
-  writeQueueLock.unlock();
 
   delete root;
 }
@@ -76,14 +72,16 @@ Node *createRoot() {
 int main() {
   ctpl::thread_pool pool(PARALLEL_GAMES);
   std::future<void> results[PARALLEL_GAMES];
-  std::deque<std::vector<std::string>*> writeQueue;
-  std::mutex writeQueueLock;
 
-  for (size_t i = 0; i < PARALLEL_GAMES; i++) { 
-    results[i] = pool.push([i, &writeQueue, &writeQueueLock](int) {
+  std::filesystem::create_directory("train");
+
+  for (size_t i = 0; i < PARALLEL_GAMES; i++) {
+    results[i] = pool.push([i](int) {
+      std::ofstream writeStream("train/" + std::to_string(i) + ".tsv");
+
       Node *root = createRoot();
       torch::Device device = torch::kCPU;
-      #ifdef HAS_CUDA
+      #ifdef HAS_CUDA 
       at::cuda::CUDAStream myStream = at::cuda::getStreamFromPool();
       at::cuda::setCurrentCUDAStream(myStream);
       device = torch::Device(torch::kCUDA, i % torch::getNumGPUs());
@@ -93,24 +91,8 @@ int main() {
       torch::NoGradGuard no_grad;
       model->to(device);
 
-      playGame(root, model, device, writeQueue, writeQueueLock);
+      playGame(root, model, device, writeStream);
     });
-  }
-
-  while (pool.n_idle() != PARALLEL_GAMES) {
-    std::this_thread::sleep_for(std::chrono::seconds(1));
-  }
-  std::cout << "finished games" << std::endl;
-  std::ofstream file("fens.txt");
-
-  while (writeQueue.size() != 0) {
-    std::vector<std::string>* game = writeQueue.front();
-    for (std::string fen : *game) {
-      file << fen << "\n";
-    }
-    file << "\n\n";
-    writeQueue.pop_front();
-    delete game;
   }
 
   for (int i=0; i < PARALLEL_GAMES; i++) results[i].wait();
