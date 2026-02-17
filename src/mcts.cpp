@@ -297,15 +297,36 @@ void putBatch(Node *node, Eval &outputs, GlobalData &g) {
 
   for (size_t i = 0; i < nodes.size(); i++) {
     if (nodes[i]->children.size() == 0) {
-      for (Move move : createMovelistVec(nodes[i]->position)) {
+      std::vector<Move> movelist = createMovelistVec(nodes[i]->position);
+      torch::Tensor noise;
+
+      if (nodes[i]->root) {
+        torch::Tensor alpha =
+            torch::full(movelist.size(), DIRICHLET_ALPHA, torch::kCPU);
+        noise = at::_sample_dirichlet(alpha);
+      }
+
+      for (size_t j = 0; j < movelist.size(); j++) {
+        Move move = movelist[j];
         Midnight::Position newBoard(nodes[i]->position);
         playMove(newBoard, move);
+        Node *childNode;
 
-        Node *childNode =
-            new Node(nodes[i], {}, newBoard,
-                     outputs.policy[i][policyIndex(nodes[i]->position, move)]
-                         .item()
-                         .toFloat());
+        if (nodes[i]->root) {
+          childNode = new Node(
+              nodes[i], {}, newBoard,
+              (1 - DIRICHLET_EPSILON) *
+                      outputs.policy[i][policyIndex(nodes[i]->position, move)]
+                          .item()
+                          .toFloat() +
+                  (DIRICHLET_EPSILON * noise[j]).item().toFloat());
+        } else {
+          childNode =
+              new Node(nodes[i], {}, newBoard,
+                       outputs.policy[i][policyIndex(nodes[i]->position, move)]
+                           .item()
+                           .toFloat());
+        }
 
         nodes[i]->children.insert(childNode);
       }
@@ -317,7 +338,7 @@ void putBatch(Node *node, Eval &outputs, GlobalData &g) {
   batch.nnInputs = {};
   batch.nodes = {};
 
-  while (true) {
+  for (int i = 0; i < 200; i++) {
     float result = batchPUCT(node, false, g);
 
     if (result == UNKNOWN) {

@@ -17,5 +17,9 @@ constexpr uint64_t TABLE_SIZE = 1ULL << 25; // size of transposition table.
 constexpr float UNKNOWN = INFINITY;         // unknown value for batchPUCT.
 constexpr float VL = 2; // virtual loss value for updating statistics.
 constexpr float TEMPERATURE_DECAY = -0.42f; // the exponent for temperature.
+constexpr float DIRICHLET_ALPHA = 0.3;
+constexpr float DIRICHLET_EPSILON = 0.25;
 constexpr int PARALLEL_GAMES =
     1; // the number of games to be run in parallel during data collection.
+constexpr int BUFFER_SIZE = 100000;
+constexpr int SAMPLE_SIZE = 4000;
