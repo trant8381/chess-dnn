@@ -34,6 +34,7 @@ private:
   std::array<GameStats, BUFFER_SIZE> arr;
   bool complete = false;
   int index = 0;
+  uint64_t _totalSize;
 
   std::random_device rd;
   std::mt19937 gen;
@@ -47,6 +48,7 @@ public:
   }
 
   void insert(GameStats gameStats) {
+    _totalSize += 1;
     if (index == BUFFER_SIZE) {
       index = 0;
       arr[0] = gameStats;
@@ -63,6 +65,10 @@ public:
     } else {
       return index;
     }
+  }
+
+  uint64_t totalSize() {
+    return _totalSize;
   }
 
   std::vector<GameStats> sample() {

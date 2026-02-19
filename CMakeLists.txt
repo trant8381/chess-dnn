@@ -22,13 +22,13 @@ else()
 endif()
 
 # ------------------ Path Settings ------------------
-set(MAIN_PATH "${CMAKE_SOURCE_DIR}") # ------- Makes source dir
+set(MAIN_PATH "${CMAKE_SOURCE_DIR}")
 set(CMAKE_PREFIX_PATH "${MAIN_PATH}/external/libtorch")
 set(SRC "${MAIN_PATH}/src")
-file(GLOB MAIN_SRC
+file(GLOB TRAIN_SRC
      "${SRC}/create_state.cpp"
      "${SRC}/mcts.cpp"
-     "${SRC}/main.cpp"
+     "${SRC}/train.cpp"
 )
 
 # ------------------ Torch Settings ------------------
@@ -36,8 +36,8 @@ include_directories("${MAIN_PATH}/external/libtorch")
 find_package(Torch REQUIRED)
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
-add_executable (main ${MAIN_SRC})
-target_include_directories(main PRIVATE ${SRC}/include)
+add_executable (train ${TRAIN_SRC})
+target_include_directories(train PRIVATE ${SRC}/include)
 
 # ------------------ CUDA Settings ------------------
 if (CMAKE_CUDA_COMPILER_LOADED)
@@ -47,7 +47,7 @@ if (CMAKE_CUDA_COMPILER_LOADED)
      "${SRC}/create_state_fast.cpp"
      "${SRC}/create_state.cpp"
      "${SRC}/mcts.cpp"
-     "${SRC}/main.cpp"
+     "${SRC}/train.cpp"
   )
   add_library(cuda_uint64 STATIC ${CUDA_SRC})
   target_compile_features(cuda_uint64 PUBLIC cxx_std_20)
@@ -60,12 +60,12 @@ if (CMAKE_CUDA_COMPILER_LOADED)
       CUDA_STANDARD 20
   )
 
-  target_link_libraries(main PRIVATE ${TORCH_LIBRARIES} cuda_uint64)
-  set_property(TARGET main
+  target_link_libraries(train PRIVATE ${TORCH_LIBRARIES} cuda_uint64)
+  set_property(TARGET train
                PROPERTY CUDA_SEPARABLE_COMPILATION ON)
-  target_compile_definitions(main PUBLIC HAS_CUDA)
-  target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
+  target_compile_definitions(train PUBLIC HAS_CUDA)
+  target_compile_options(train PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
 else()
-  target_link_libraries(main ${TORCH_LIBRARIES})
-  target_compile_options(main PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
+  target_link_libraries(train ${TORCH_LIBRARIES})
+  target_compile_options(train PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
 endif()

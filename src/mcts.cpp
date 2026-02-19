@@ -156,7 +156,7 @@ static const int KDY[8] = {2, 1, -1, -2, -2, -1, 1, 2};
 
 // returns the index for the policy tensor that corresponds to a move on the
 // board.
-float policyIndex(Position &board, Move move) {
+int policyIndex(Position &board, Move move) {
   Piece piece = board.piece_at(move.from());
   PieceType pieceType = static_cast<PieceType>(piece % 8);
   int diffx = move.to() % 8 - move.from() % 8;

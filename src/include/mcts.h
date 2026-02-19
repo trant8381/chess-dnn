@@ -21,3 +21,5 @@ struct GlobalData {
 Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g);
 float terminalValue(Midnight::Position &board);
 bool isTerminal(Midnight::Position &board);
+int policyIndex(Midnight::Position &board, Midnight::Move move);
+std::vector<Midnight::Move> createMovelistVec(Midnight::Position &board);

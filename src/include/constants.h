@@ -23,3 +23,4 @@ constexpr int PARALLEL_GAMES =
     1; // the number of games to be run in parallel during data collection.
 constexpr int BUFFER_SIZE = 100000;
 constexpr int SAMPLE_SIZE = 4000;
+constexpr uint64_t TRAIN_THRESHOLD = 1;
