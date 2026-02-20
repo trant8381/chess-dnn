@@ -228,14 +228,13 @@ float batchPUCT(Node *node, bool getBatch, GlobalData &g) {
     return terminalValue(node->position);
   }
 
-  if (!node->initialized) {
+  if (node->children.size() == 0) {
     if (getBatch) {
       batch.nodes.push_back(node);
       if (g.device == torch::kCPU) {
         batch.nnInputs.push_back(createState(constructHistory(node), g.device));
       }
     } else if (node->valueEval != INFINITY) {
-      node->initialized = true;
       return node->valueEval;
     }
     return UNKNOWN;

@@ -9,6 +9,7 @@
 #include <ATen/core/jit_type.h>
 #include <ATen/ops/_sample_dirichlet.h>
 #include <c10/core/Device.h>
+#include <c10/core/DeviceGuard.h>
 #include <c10/core/DeviceType.h>
 #include <c10/core/ScalarType.h>
 #include <c10/core/TensorOptions.h>
@@ -67,7 +68,7 @@ void playGame(Node *root, DNN &model, const torch::Device device,
   }
 
   float gameResult = terminalValue(root->position);
-  while (buffer.lock.try_lock()) {
+  while (!buffer.lock.try_lock()) {
     std::this_thread::sleep_for(std::chrono::nanoseconds(1000));
   }
 
@@ -110,35 +111,37 @@ int main() {
     std::cout << "gameThread started" << std::endl;
     ctpl::thread_pool pool(PARALLEL_GAMES);
     std::atomic<int32_t> games = 0;
-    std::atomic<int32_t> runningGames = 0;
+    int32_t runningGames = 0;
 
     while (true) {
       int idleThreads = pool.n_idle();
       if (idleThreads) {
         for (int i = 0; i < idleThreads; i++) {
-          pool.push([&buffer, &fileLock, &games, &runningGames](int) {
-            ++runningGames;
+          ++runningGames;
+          pool.push([&buffer, &fileLock, &games, runningGames](int) {
             Node *root = createRoot();
             torch::Device device = torch::kCPU;
 
 #ifdef HAS_CUDA
             device =
-                torch::Device(torch::kCUDA, (runningGames - 1) % torch::getNumGPUs() - 1);
+                torch::Device(torch::kCUDA, (runningGames - 1) % torch::getNumGPUs());
+            c10::DeviceGuard guard(device);
             at::cuda::CUDAStream myStream =
-                at::cuda::getStreamFromPool(false, device);
-            at::cuda::setCurrentCUDAStream(myStream);
+                at::cuda::getStreamFromPool();
+            c10::cuda::setCurrentCUDAStream(myStream);
 #endif
 
             DNN model = DNN();
-            while (fileLock.try_lock()) {
+            while (!fileLock.try_lock()) {
               std::this_thread::sleep_for(std::chrono::nanoseconds(100));
             }
             torch::load(model, "model.pt");
             fileLock.unlock();
 
-            torch::NoGradGuard no_grad;
             model->to(device);
+            model->eval();
 
+            torch::NoGradGuard no_grad;
             playGame(root, model, device, buffer);
             ++games;
           });
@@ -152,6 +155,10 @@ int main() {
 
   std::thread trainThread([&buffer, &fileLock]() {
     torch::Device device = torch::kCPU;
+    #ifdef HAS_CUDA
+            device =
+                torch::Device(torch::kCUDA);
+    #endif
     DNN model = DNN();
     torch::load(model, "model.pt");
     torch::optim::SGD optimizer = torch::optim::SGD(
@@ -160,8 +167,8 @@ int main() {
             false));
 
     model->to(device);
-    model->train(true);
-
+    model->train();
+    
     std::cout << "trainThread started" << std::endl;
     uint64_t currSize = buffer.totalSize();
 
@@ -228,7 +235,7 @@ int main() {
 
         std::cout << "train loss: " << loss << std::endl;
 
-        while (fileLock.try_lock()) {
+        while (!fileLock.try_lock()) {
           std::this_thread::sleep_for(std::chrono::nanoseconds(100));
         }
         torch::save(model, "model.pt");
