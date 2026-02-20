@@ -94,7 +94,6 @@ torch::Tensor computeLoss(const torch::Tensor &policyMask,
   torch::Tensor logProbs = torch::nn::functional::log_softmax(
       masked, torch::nn::functional::LogSoftmaxFuncOptions(1));
   torch::Tensor policyLoss = torch::sum(-(policyTargets * logProbs), 1).mean();
-
   torch::Tensor valueLoss =
       torch::nn::functional::mse_loss(eval.value.squeeze(-1), valueTargets);
 
@@ -188,7 +187,7 @@ int main() {
             sum += gameStats.distribution[j];
           }
 
-          policyTargets /= sum;
+          policyTargets[i] /= sum;
           valueTargets[i] = gameStats.result;
         }
 
