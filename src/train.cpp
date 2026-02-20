@@ -109,18 +109,24 @@ int main() {
   std::thread gameThread([&buffer, &fileLock]() {
     std::cout << "gameThread started" << std::endl;
     ctpl::thread_pool pool(PARALLEL_GAMES);
-    std::atomic<int32_t> games;
+    std::atomic<int32_t> games = 0;
+    std::atomic<int32_t> runningGames = 0;
+
     while (true) {
       int idleThreads = pool.n_idle();
       if (idleThreads) {
         for (int i = 0; i < idleThreads; i++) {
-          pool.push([i, &buffer, &fileLock, &games](int) {
+          pool.push([&buffer, &fileLock, &games, &runningGames](int) {
+            ++runningGames;
             Node *root = createRoot();
             torch::Device device = torch::kCPU;
+
 #ifdef HAS_CUDA
-            at::cuda::CUDAStream myStream = at::cuda::getStreamFromPool();
+            device =
+                torch::Device(torch::kCUDA, (runningGames - 1) % torch::getNumGPUs() - 1);
+            at::cuda::CUDAStream myStream =
+                at::cuda::getStreamFromPool(false, device);
             at::cuda::setCurrentCUDAStream(myStream);
-            device = torch::Device(torch::kCUDA, i % torch::getNumGPUs());
 #endif
 
             DNN model = DNN();
