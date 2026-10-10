@@ -83,7 +83,7 @@ torch::Tensor createStateFast(const std::vector<Node *> &nodes,
 
   arange(64, maskPtr);
   sq(64, maskPtr);
-  batch_and_ne(1, maskPtr, batchPtr, binPlanesPtr);
+  batch_and_ne(B, maskPtr, batchPtr, binPlanesPtr);
   torch::Tensor scalar_vals =
       torch::from_blob(input.scalars.data(), {B, 7},
                        torch::TensorOptions().dtype(torch::kFloat))

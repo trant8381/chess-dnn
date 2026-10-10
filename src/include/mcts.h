@@ -17,6 +17,7 @@ struct GlobalData {
   GlobalData(const torch::Device &_device) : device(_device) {};
 };
 
+static constexpr bool POLICY_IS_LOGITS = false;
 struct Sample {
   torch::Tensor input;
   std::vector<std::pair<int, float>> policy;

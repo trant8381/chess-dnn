@@ -8,6 +8,7 @@
 #include <c10/core/Device.h>
 #include <c10/core/DeviceType.h>
 #include <chrono>
+#include <cmath>
 #include <cstddef>
 #include <deque>
 #include <exception>
@@ -107,9 +108,6 @@ static void syncWeights(SharedWeights &shared, DNN &local, int &localVersion) {
   localVersion = shared.version.load();
 }
 
-// ---------------------------------------------------------------------------
-// Trainer thread.
-// ---------------------------------------------------------------------------
 static void trainLoop(ReplayBuffer &buffer, SharedWeights &shared,
                       const torch::Device device, std::atomic<bool> &stop) {
   DNN model;
@@ -158,13 +156,27 @@ static void trainLoop(ReplayBuffer &buffer, SharedWeights &shared,
       }
     }
 
-    torch::Tensor policyLoss =
-        -(target.to(device) * torch::log(policy.clamp_min(1e-8))).sum(1).mean();
+    torch::Tensor logProb = POLICY_IS_LOGITS
+                                ? torch::log_softmax(policy, 1)
+                                : torch::log(policy.clamp_min(1e-8));
+    torch::Tensor policyLoss = -(target.to(device) * logProb).sum(1).mean();
     torch::Tensor valueLoss = torch::mse_loss(value, values.to(device));
     torch::Tensor loss = policyLoss + valueLoss;
 
+    if (!std::isfinite(loss.item<float>())) {
+      std::cerr << "skipping train step: non-finite loss" << std::endl;
+      continue;
+    }
+
     optimizer.zero_grad();
     loss.backward();
+    const double gradNorm =
+        torch::nn::utils::clip_grad_norm_(model->parameters(), 1.0);
+    if (!std::isfinite(gradNorm)) {
+      std::cerr << "skipping train step: non-finite gradient" << std::endl;
+      optimizer.zero_grad();
+      continue;
+    }
     optimizer.step();
     step++;
 
@@ -255,12 +267,12 @@ static void selfPlayWorker(size_t id, ReplayBuffer &buffer,
 
   DNN model;
   model->to(device);
-  model->eval(); // batch norm / dropout must run in inference mode
+  model->eval();
   torch::NoGradGuard no_grad;
 
   int version = -1;
   while (gamesStarted.fetch_add(1) < TOTAL_GAMES) {
-    syncWeights(shared, model, version); // newest weights for each new game
+    syncWeights(shared, model, version);
     playGame(createRoot(), model, device, buffer);
   }
 }
