@@ -3,7 +3,6 @@
 #include "dnn.h"
 #include "move_gen.h"
 #include "node.h"
-#include <cmath>
 
 struct Batch {
   std::vector<torch::Tensor> nnInputs;
@@ -17,6 +16,15 @@ struct GlobalData {
 
   GlobalData(const torch::Device &_device) : device(_device) {};
 };
+
+struct Sample {
+  torch::Tensor input;
+  std::vector<std::pair<int, float>> policy;
+  float value = 0.0f;
+};
+
+Sample makeSample(Node *root);
+float terminalValue(Midnight::Position &board);
 
 Node *getNextMove(Node *node, DNN &model, float temperature, GlobalData &g);
 bool isTerminal(Midnight::Position &board);

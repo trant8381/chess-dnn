@@ -1,6 +1,5 @@
 #include "create_state.h"
 #include "constants.h"
-#include "mcts.h"
 #include <ATen/core/TensorBody.h>
 #include <ATen/ops/arange.h>
 #include <ATen/ops/bitwise_right_shift.h>

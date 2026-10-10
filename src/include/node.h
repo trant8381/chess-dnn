@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cmath>
 #include <set>
 #include "move_gen.h"
