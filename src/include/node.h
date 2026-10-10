@@ -1,10 +1,5 @@
-<<<<<<< HEAD
 #pragma once
 
-=======
-#ifndef NODE_H
-#define NODE_H
->>>>>>> refs/remotes/origin/main
 #include <cmath>
 #include <set>
 #include "move_gen.h"
@@ -55,5 +50,3 @@ struct Node {
     }
   }
 };
-
-#endif
