@@ -1,3 +1,6 @@
+#ifndef CREATE_STATE_FAST_H
+#define CREATE_STATE_FAST_H
+
 #include "node.h"
 #include "move_gen.h"
 #include "constants.h"
@@ -15,3 +18,5 @@ struct NNInputBatch {
 Histories constructHistoryFast(Node *node);
 torch::Tensor createStateFast(const std::vector<Node *> &nodes,
                               const torch::Device &device);
+
+#endif

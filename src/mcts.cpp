@@ -41,7 +41,12 @@ Statistics getTreeStats(Node *node, bool isBatch, GlobalData &g) {
   return Statistics(&node->totalValue, &node->visitCount);
 }
 
+<<<<<<< HEAD
 std::vector<Midnight::Move> createMovelistVec(Midnight::Position board) {
+=======
+// creates a vector of Move with some hacks to get aorund templates.
+std::vector<Midnight::Move> createMovelistVec(Midnight::Position &board) {
+>>>>>>> refs/remotes/origin/main
   const Midnight::Move *begin;
   const Midnight::Move *end;
   if (board.turn() == Midnight::WHITE) {
@@ -87,6 +92,9 @@ bool insufficientMaterial(Midnight::Position &board) {
     return true;
 
   if ((bn + bb == 1) && (wn + wb == 0))
+    return true;
+
+  if (wn == 1 && bn == 1)
     return true;
 
   // King + bishop vs king + bishop (same color bishops)
@@ -150,7 +158,12 @@ float terminalValue(Midnight::Position &board) {
 static const int KDX[8] = {1, 2, 2, 1, -1, -2, -2, -1};
 static const int KDY[8] = {2, 1, -1, -2, -2, -1, 1, 2};
 
+<<<<<<< HEAD
 
+=======
+// returns the index for the policy tensor that corresponds to a move on the
+// board.
+>>>>>>> refs/remotes/origin/main
 int policyIndex(Position &board, Move move) {
   Piece piece = board.piece_at(move.from());
   PieceType pieceType = static_cast<PieceType>(piece % 8);
@@ -207,6 +220,7 @@ float batchPUCT(Node *node, bool batchMode, GlobalData &g,
     return value;
   }
 
+<<<<<<< HEAD
   Statistics stats = getTreeStats(node, batchMode, g);
 
   bool inTree = *stats.visitCount > 0 && node->valueEval != INFINITY;
@@ -225,6 +239,16 @@ float batchPUCT(Node *node, bool batchMode, GlobalData &g,
         virtualMean(node, ownMean, g);
       }
       return UNKNOWN;
+=======
+  if (node->children.size() == 0) {
+    if (getBatch) {
+      batch.nodes.push_back(node);
+      if (g.device == torch::kCPU) {
+        batch.nnInputs.push_back(createState(constructHistory(node), g.device));
+      }
+    } else if (node->valueEval != INFINITY) {
+      return node->valueEval;
+>>>>>>> refs/remotes/origin/main
     }
 
 
@@ -301,6 +325,7 @@ void putBatch(Node *root, Eval &outputs, GlobalData &g) {
   auto value = valueCpu.accessor<float, 1>();
 
   for (size_t i = 0; i < nodes.size(); i++) {
+<<<<<<< HEAD
     Node *node = nodes[i];
     std::vector<Midnight::Move> moves = createMovelistVec(node->position);
 
@@ -309,6 +334,42 @@ void putBatch(Node *root, Eval &outputs, GlobalData &g) {
     for (size_t k = 0; k < moves.size(); k++) {
       priors[k] = policy[i][policyIndex(node->position, moves[k])];
       sum += priors[k];
+=======
+    if (nodes[i]->children.size() == 0) {
+      std::vector<Move> movelist = createMovelistVec(nodes[i]->position);
+      torch::Tensor noise;
+
+      if (nodes[i]->root) {
+        torch::Tensor alpha =
+            torch::full(movelist.size(), DIRICHLET_ALPHA, torch::kCPU);
+        noise = at::_sample_dirichlet(alpha);
+      }
+
+      for (size_t j = 0; j < movelist.size(); j++) {
+        Move move = movelist[j];
+        Midnight::Position newBoard(nodes[i]->position);
+        playMove(newBoard, move);
+        Node *childNode;
+
+        if (nodes[i]->root) {
+          childNode = new Node(
+              nodes[i], {}, newBoard,
+              (1 - DIRICHLET_EPSILON) *
+                      outputs.policy[i][policyIndex(nodes[i]->position, move)]
+                          .item()
+                          .toFloat() +
+                  (DIRICHLET_EPSILON * noise[j]).item().toFloat());
+        } else {
+          childNode =
+              new Node(nodes[i], {}, newBoard,
+                       outputs.policy[i][policyIndex(nodes[i]->position, move)]
+                           .item()
+                           .toFloat());
+        }
+
+        nodes[i]->children.insert(childNode);
+      }
+>>>>>>> refs/remotes/origin/main
     }
 
     for (size_t k = 0; k < moves.size(); k++) {
@@ -326,8 +387,15 @@ void putBatch(Node *root, Eval &outputs, GlobalData &g) {
   batch.nnInputs.clear();
   batch.nodes.clear();
 
+<<<<<<< HEAD
   for (int i = 0; i < MAX_DESCENTS; i++) {
     if (batchPUCT(root, false, g) == UNKNOWN) {
+=======
+  for (int i = 0; i < 200; i++) {
+    float result = batchPUCT(node, false, g);
+
+    if (result == UNKNOWN) {
+>>>>>>> refs/remotes/origin/main
       break;
     }
   }
@@ -406,6 +474,7 @@ Sample makeSample(Node *root) {
 Node *getNextMove(Node *root, DNN &model, float temperature, GlobalData &g) {
   Batch &batch = g.batch;
 
+<<<<<<< HEAD
   if (isTerminal(root->position)) {
     return nullptr; // game over, nothing to search
   }
@@ -417,6 +486,13 @@ Node *getNextMove(Node *root, DNN &model, float temperature, GlobalData &g) {
     getBatch(root, g, std::min<int>(BATCH_SIZE, SIMULATIONS - evaluations));
     if (batch.nodes.empty()) {
       break; // every descent ended on a known value, nothing left to evaluate
+=======
+  for (int i = 0; i < SIMULATIONS;) {
+    getBatch(node, g);
+    if (batch.nodes.size() == 0) {
+      i += 1;
+      continue;
+>>>>>>> refs/remotes/origin/main
     }
 
     torch::Tensor batchedInput;

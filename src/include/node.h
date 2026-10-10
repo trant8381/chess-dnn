@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 #pragma once
 
+=======
+#ifndef NODE_H
+#define NODE_H
+>>>>>>> refs/remotes/origin/main
 #include <cmath>
 #include <set>
 #include "move_gen.h"
@@ -15,10 +20,10 @@ struct Node {
 
   float batch_totalValue = 0;
   uint32_t batch_visitCount = 0;
+  uint32_t batchNum = 0;
 
   bool initialized = false;
-
-  uint32_t batchNum = 0;
+  bool root = false;
 
   float valueEval = INFINITY;
   float policyEval;
@@ -28,6 +33,7 @@ struct Node {
     parent = _parent;
     children = _children;
     position = _position;
+    root = true;
   }
 
   Node(Node *_parent, const std::set<Node *> _children,
@@ -49,3 +55,5 @@ struct Node {
     }
   }
 };
+
+#endif
