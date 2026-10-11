@@ -11,16 +11,16 @@ constexpr int INPUT_PLANES =
 constexpr int TRUNK_CHANNELS = 64; // channels per resnet block.
 constexpr int TOWER_SIZE = 6;      // amount of resnet blocks.
 constexpr float C_PUCT = 1.5f;     // PUCT constant for MCTS selection.
-constexpr int SIMULATIONS = 200;   // amount of simulations for one move.
+constexpr int SIMULATIONS = 400;   // amount of simulations for one move.
 constexpr float FPU = -0.2f;       // temperature constant for move selection.
 constexpr uint64_t TABLE_SIZE = 1ULL << 25; // size of transposition table.
 constexpr float UNKNOWN = INFINITY;         // unknown value for batchPUCT.
 constexpr float VL = 2; // virtual loss value for updating statistics.
-constexpr float TEMPERATURE_DECAY = -0.42f; // the exponent for temperature.
+constexpr float TEMPERATURE_DECAY = 0.98f; // the exponent for temperature.
 constexpr float DIRICHLET_ALPHA = 0.3;
 constexpr float DIRICHLET_EPSILON = 0.25;
 constexpr int PARALLEL_GAMES =
-    1; // the number of games to be run in parallel during data collection.
-constexpr int BUFFER_SIZE = 100000;
-constexpr int SAMPLE_SIZE = 4000;
+    32; // the number of games to be run in parallel during data collection.
+constexpr int BUFFER_SIZE = 200000;
+constexpr int SAMPLE_SIZE = 256;
 constexpr uint64_t TRAIN_THRESHOLD = 1;

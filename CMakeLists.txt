@@ -31,6 +31,12 @@ file(GLOB TRAIN_SRC
      "${SRC}/train.cpp"
 )
 
+file(GLOB PLAY_SRC
+     "${SRC}/create_state.cpp"
+     "${SRC}/mcts.cpp"
+     "${SRC}/play.cpp"
+)
+
 # ------------------ Torch Settings ------------------
 include_directories("${MAIN_PATH}/external/libtorch")
 find_package(Torch REQUIRED)
@@ -38,6 +44,9 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${TORCH_CXX_FLAGS}")
 
 add_executable (train ${TRAIN_SRC})
 target_include_directories(train PRIVATE ${SRC}/include)
+
+add_executable (play ${PLAY_SRC})
+target_include_directories(play PRIVATE ${SRC}/include)
 
 # ------------------ CUDA Settings ------------------
 if (CMAKE_CUDA_COMPILER_LOADED)
@@ -65,7 +74,16 @@ if (CMAKE_CUDA_COMPILER_LOADED)
                PROPERTY CUDA_SEPARABLE_COMPILATION ON)
   target_compile_definitions(train PUBLIC HAS_CUDA)
   target_compile_options(train PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
+
+  target_link_libraries(play PRIVATE ${TORCH_LIBRARIES} cuda_uint64)
+  set_property(TARGET play
+               PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+  target_compile_definitions(play PUBLIC HAS_CUDA)
+  target_compile_options(play PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
 else()
   target_link_libraries(train ${TORCH_LIBRARIES})
   target_compile_options(train PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
+
+  target_link_libraries(play ${TORCH_LIBRARIES})
+  target_compile_options(play PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
 endif()

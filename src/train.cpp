@@ -21,14 +21,15 @@
 #include <torch/torch.h>
 #include <utility>
 #include <vector>
+#include <fstream>
 
-static constexpr int TOTAL_GAMES = 1000;           // self-play games to run
-static constexpr size_t REPLAY_CAPACITY = 200000;  // positions kept
-static constexpr size_t TRAIN_MIN_SAMPLES = 5000;  // wait for this many first
+static constexpr int TOTAL_GAMES = 100000;         // self-play games to run
+static constexpr size_t REPLAY_CAPACITY = 500000;  // positions kept
+static constexpr size_t TRAIN_MIN_SAMPLES = 100000;  // wait for this many first
 static constexpr int64_t TRAIN_BATCH_SIZE = 256;
 static constexpr int TRAIN_PUBLISH_EVERY = 100;    // steps between publishes
 static constexpr int TRAIN_CHECKPOINT_EVERY = 1000;
-static constexpr double LEARNING_RATE = 0.01;
+static constexpr double LEARNING_RATE = 0.001;
 
 struct State {
   Midnight::Position position;
@@ -189,6 +190,8 @@ static void trainLoop(ReplayBuffer &buffer, SharedWeights &shared,
     if (step % TRAIN_CHECKPOINT_EVERY == 0) {
       torch::save(model, "checkpoint.pt");
     }
+    std::cout << step << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(10));
   }
 
   publishWeights(model, shared);
@@ -223,8 +226,6 @@ static void playGame(Node *root, DNN &model, const torch::Device device,
 
     // Assumes TEMPERATURE_DECAY is a factor below 1 (e.g. 0.97).
     temperature *= TEMPERATURE_DECAY;
-
-    std::cout << root->position << std::endl;
   }
 
   if (isTerminal(root->position)) {
@@ -246,7 +247,6 @@ static void playGame(Node *root, DNN &model, const torch::Device device,
 
   Node *first = root;
   for (Node *node = root; node; node = node->parent) {
-    std::cout << node->position.fen() << std::endl;
     first = node;
   }
 
