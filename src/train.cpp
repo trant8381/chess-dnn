@@ -3,6 +3,8 @@
 #include "dnn.h"
 #include "mcts.h"
 #include "move_gen.h"
+#include "predictor.h"
+#include <memory>
 #include <ATen/Context.h>
 #include <atomic>
 #include <c10/core/Device.h>
@@ -78,34 +80,19 @@ struct SharedWeights {
   std::atomic<int> version{0};
 };
 
-static void copyWeights(DNN &src, DNN &dst) {
-  torch::NoGradGuard no_grad;
-
-  auto srcParams = src->named_parameters();
-  auto dstParams = dst->named_parameters();
-  for (auto &item : dstParams) {
-    item.value().copy_(srcParams[item.key()]);
-  }
-
-  auto srcBuffers = src->named_buffers();
-  auto dstBuffers = dst->named_buffers();
-  for (auto &item : dstBuffers) {
-    item.value().copy_(srcBuffers[item.key()]);
-  }
-}
-
 static void publishWeights(DNN &trained, SharedWeights &shared) {
   std::lock_guard<std::mutex> lock(shared.mutex);
   copyWeights(trained, shared.model);
   shared.version.fetch_add(1);
 }
 
-static void syncWeights(SharedWeights &shared, DNN &local, int &localVersion) {
+static void syncWeights(SharedWeights &shared, Predictor &predictor,
+                        int &localVersion) {
   if (shared.version.load() == localVersion) {
     return;
   }
   std::lock_guard<std::mutex> lock(shared.mutex);
-  copyWeights(shared.model, local);
+  predictor.publishWeights(shared.model);
   localVersion = shared.version.load();
 }
 
@@ -198,15 +185,15 @@ static void trainLoop(ReplayBuffer &buffer, SharedWeights &shared,
   torch::save(model, "checkpoint.pt");
 }
 
-static void playGame(Node *root, DNN &model, const torch::Device device,
-                     ReplayBuffer &buffer) {
-  GlobalData g = GlobalData(device);
+static void playGame(Node *root, Predictor &predictor,
+                     const torch::Device device, ReplayBuffer &buffer) {
+  GlobalData g = GlobalData(device, &predictor);
 
   float temperature = 1.0f;
   std::vector<Sample> samples; // one per ply, in game order
 
   while (!isTerminal(root->position)) {
-    Node *selected = getNextMove(root, model, temperature, g);
+    Node *selected = getNextMove(root, temperature, g);
     if (selected == nullptr) {
       break; // nothing to play
     }
@@ -259,21 +246,17 @@ static Node *createRoot() {
 
 static void selfPlayWorker(size_t id, ReplayBuffer &buffer,
                            SharedWeights &shared,
-                           std::atomic<int> &gamesStarted) {
+                           std::atomic<int> &gamesStarted,
+                           Predictor *predictor) {
   torch::Device device = torch::kCPU;
   if (torch::cuda::is_available()) {
     device = torch::Device(torch::kCUDA, id % torch::getNumGPUs());
   }
 
-  DNN model;
-  model->to(device);
-  model->eval();
-  torch::NoGradGuard no_grad;
-
   int version = -1;
   while (gamesStarted.fetch_add(1) < TOTAL_GAMES) {
-    syncWeights(shared, model, version);
-    playGame(createRoot(), model, device, buffer);
+    syncWeights(shared, *predictor, version);
+    playGame(createRoot(), *predictor, device, buffer);
   }
 }
 
@@ -290,6 +273,19 @@ int main() {
     trainDevice = torch::Device(torch::kCUDA, 0);
   }
 
+  // One central predictor per GPU (plus a CPU fallback); game workers no
+  // longer own model copies.
+  std::vector<std::unique_ptr<Predictor>> predictors;
+  if (torch::cuda::is_available()) {
+    const int64_t numGPUs = torch::getNumGPUs();
+    for (int64_t i = 0; i < numGPUs; i++) {
+      predictors.push_back(
+          std::make_unique<Predictor>(torch::Device(torch::kCUDA, i)));
+    }
+  } else {
+    predictors.push_back(std::make_unique<Predictor>(torch::kCPU));
+  }
+
   std::future<void> trainer = std::async(std::launch::async, [&] {
     trainLoop(buffer, shared, trainDevice, stopTraining);
   });
@@ -300,7 +296,8 @@ int main() {
     std::vector<std::future<void>> games;
     for (size_t i = 0; i < PARALLEL_GAMES; i++) {
       games.push_back(pool.push([&, i](int) {
-        selfPlayWorker(i, buffer, shared, gamesStarted);
+        selfPlayWorker(i, buffer, shared, gamesStarted,
+                       predictors[i % predictors.size()].get());
       }));
     }
 
@@ -309,6 +306,10 @@ int main() {
     }
   } catch (...) {
     error = std::current_exception();
+  }
+
+  for (auto &predictor : predictors) {
+    predictor->stop();  // drains any remaining queued requests
   }
 
   stopTraining = true;

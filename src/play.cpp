@@ -1,6 +1,6 @@
-#include "dnn.h"
 #include "mcts.h"
 #include "move_gen.h"
+#include "predictor.h"
 #include <algorithm>
 #include <cctype>
 #include <exception>
@@ -96,15 +96,16 @@ static void announceResult(Node *root, Midnight::Color human) {
   const float value = terminalValue(root->position); // side to move's view
   if (value < 0.0f) {
     const bool humanMated = root->position.turn() == human;
-    std::cout << "Checkmate. "
-              << (humanMated ? "The engine wins." : "You win.") << std::endl;
+    std::cout << "Checkmate. " << (humanMated ? "The engine wins." : "You win.")
+              << std::endl;
   } else {
     std::cout << "Draw." << std::endl;
   }
 }
 
 static std::string trim(std::string text) {
-  while (!text.empty() && std::isspace(static_cast<unsigned char>(text.back()))) {
+  while (!text.empty() &&
+         std::isspace(static_cast<unsigned char>(text.back()))) {
     text.pop_back();
   }
   size_t start = 0;
@@ -132,13 +133,10 @@ int main(int argc, char **argv) {
       device = torch::Device(torch::kCUDA, 0);
     }
 
-    DNN model;
-    torch::load(model, path, device);
-    model->to(device);
-    model->eval(); // batch norm / dropout must run in inference mode
-    torch::NoGradGuard no_grad;
+    Predictor predictor(device);
+    predictor.loadCheckpoint(path); // parked thread: safe
 
-    GlobalData g = GlobalData(device);
+    GlobalData g = GlobalData(device, &predictor);
     Node *root = new Node(nullptr, {}, Midnight::Position(Midnight::START_FEN));
 
     while (true) {
@@ -189,7 +187,7 @@ int main(int argc, char **argv) {
         std::cout << "Engine is thinking..." << std::endl;
 
         // Temperature 0: play the most visited move.
-        Node *selected = getNextMove(root, model, 0.0f, g);
+        Node *selected = getNextMove(root, 0.0f, g);
         if (selected == nullptr) {
           std::cout << "The engine has no move." << std::endl;
           break;

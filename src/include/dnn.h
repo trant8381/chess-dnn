@@ -167,3 +167,22 @@ public:
 };
 
 TORCH_MODULE(DNN);
+
+// Copies all named parameters and buffers from `src` to `dst`. Both models
+// must share the same architecture. Used for weight publishing/syncing
+// (trainer -> shared model -> predictors).
+inline void copyWeights(const DNN &src, DNN &dst) {
+  torch::NoGradGuard no_grad;
+
+  auto srcParams = src->named_parameters();
+  auto dstParams = dst->named_parameters();
+  for (auto &item : dstParams) {
+    item.value().copy_(srcParams[item.key()]);
+  }
+
+  auto srcBuffers = src->named_buffers();
+  auto dstBuffers = dst->named_buffers();
+  for (auto &item : dstBuffers) {
+    item.value().copy_(srcBuffers[item.key()]);
+  }
+}

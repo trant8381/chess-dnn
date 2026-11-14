@@ -10,6 +10,7 @@ enable_language(C)
 enable_language(CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 include(CheckLanguage)
 
 check_language(CUDA)
@@ -28,6 +29,7 @@ set(SRC "${MAIN_PATH}/src")
 file(GLOB TRAIN_SRC
      "${SRC}/create_state.cpp"
      "${SRC}/mcts.cpp"
+     "${SRC}/predictor.cpp"
      "${SRC}/train.cpp"
 )
 
@@ -35,6 +37,7 @@ file(GLOB PLAY_SRC
      "${SRC}/create_state.cpp"
      "${SRC}/mcts.cpp"
      "${SRC}/play.cpp"
+     "${SRC}/predictor.cpp"
 )
 
 # ------------------ Torch Settings ------------------
@@ -56,6 +59,7 @@ if (CMAKE_CUDA_COMPILER_LOADED)
      "${SRC}/create_state_fast.cpp"
      "${SRC}/create_state.cpp"
      "${SRC}/mcts.cpp"
+     "${SRC}/predictor.cpp"
      "${SRC}/train.cpp"
   )
   add_library(cuda_uint64 STATIC ${CUDA_SRC})

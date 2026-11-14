@@ -4,7 +4,6 @@
 #include "dnn.h"
 #include "move_gen.h"
 #include <ATen/core/interned_strings.h>
-#include <ATen/ops/zero.h>
 #include <algorithm>
 #include <c10/core/DeviceType.h>
 #include <cassert>
@@ -17,13 +16,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
-#ifdef HAS_CUDA
-#include "create_state_fast.h"
-#endif
 
-// Maximum number of positions sent to the network in one forward pass.
-static constexpr int BATCH_SIZE = 32;
-// "N" in the paper: maximum number of tree descents used to try to fill a batch.
+// "N" in the paper: maximum number of tree descents used by one collect epoch.
 static constexpr int MAX_DESCENTS = 500;
 
 struct Statistics {
@@ -34,15 +28,9 @@ struct Statistics {
       : totalValue(_totalValue), visitCount(_visitCount) {}
 };
 
-// Convention used everywhere below:
-//   * totalValue / visitCount of a node hold values seen from the point of view
-//     of the SIDE TO MOVE AT THAT NODE.
-//   * a node's visitCount is therefore both N(s) when the node is the parent
-//     in the bandit and N(s,a) when it is the child.
-//   * every node is updated exactly once per descent, by its own call.
 Statistics getTreeStats(Node *node, bool isBatch, GlobalData &g) {
   if (isBatch) {
-    // Lazily reset the batch-tree statistics once per batch.
+    // Lazily reset the within-epoch ("batch") statistics once per collect epoch.
     if (node->batchNum < g.currBatchNum) {
       node->batchNum = g.currBatchNum;
       node->batch_totalValue = node->totalValue;
@@ -162,22 +150,6 @@ float terminalValue(Midnight::Position &board) {
 static const int KDX[8] = {1, 2, 2, 1, -1, -2, -2, -1};
 static const int KDY[8] = {2, 1, -1, -2, -2, -1, 1, 2};
 
-// returns the index for the policy tensor that corresponds to a move on the
-// board.
-//
-// The return type was changed from float to int (it is used as a tensor
-// index). The body is deliberately unchanged because it has to match the
-// encoding the network was trained with. Things to verify against your
-// training pipeline:
-//   1. direction is in 1..8, so direction * 7 + distance spans 7..62 and the
-//      direction == 8 (down-left) moves collide with the knight planes
-//      56..63. (direction - 1) * 7 + distance would give 0..55.
-//   2. for black, direction - 3 is 3..5, so 64 + piece * 3 + 3..5 can run past
-//      plane 72 into the next square's planes.
-//   3. (move.type() & 0b0111) != PR_QUEEN is always true if PR_QUEEN has the
-//      high bit set (0b1011 in Surge-style move flags), which would encode
-//      queen promotions as underpromotions. (type & 0b0011) != 0b0011 is the
-//      usual test.
 int policyIndex(Position &board, Move move) {
   Piece piece = board.piece_at(move.from());
   PieceType pieceType = static_cast<PieceType>(piece % 8);
@@ -210,18 +182,12 @@ int policyIndex(Position &board, Move move) {
   return move.from() * 73 + moveType;
 }
 
-// Adds one real visit to `node`. `value` is from the point of view of the side
-// to move at `node`.
 static void backup(Node *node, float value, bool batchMode, GlobalData &g) {
   Statistics s = getTreeStats(node, batchMode, g);
   *s.totalValue += value;
   *s.visitCount += 1;
 }
 
-// Virtual mean (batch tree only): add VL visits that carry the node's current
-// mean, so its mean stays the same but its visit count grows. This pushes the
-// next descent of the same batch towards other leaves. `fallbackMean` is used
-// for a node that has no statistics yet.
 static void virtualMean(Node *node, float fallbackMean, GlobalData &g) {
   Statistics s = getTreeStats(node, true, g);
   float mean = *s.visitCount > 0 ? *s.totalValue / *s.visitCount : fallbackMean;
@@ -229,22 +195,8 @@ static void virtualMean(Node *node, float fallbackMean, GlobalData &g) {
   *s.visitCount += VL;
 }
 
-// One descent. Returns the value of `node` from the point of view of the side
-// to move at `node`, or UNKNOWN if the descent ended on a position that has
-// not been evaluated by the network yet.
-//
-// batchMode == true : descent in the scratch (batch) statistics. Unknown leaves
-//                     are queued for the next forward pass and penalised with
-//                     the virtual mean.
-// batchMode == false: descent in the real statistics. Unknown leaves change
-//                     nothing.
-//
-// `ownMean` is the parent's estimate of this node's mean (from this node's own
-// point of view). It is only used by the virtual mean of an unvisited leaf.
 float batchPUCT(Node *node, bool batchMode, GlobalData &g,
                 float ownMean = 0.0f) {
-  Batch &batch = g.batch;
-
   if (isTerminal(node->position)) {
     float value = terminalValue(node->position);
     backup(node, value, batchMode, g);
@@ -261,13 +213,11 @@ float batchPUCT(Node *node, bool batchMode, GlobalData &g,
     if (node->valueEval == INFINITY) {
       // Not evaluated by the network yet.
       if (batchMode) {
-        if (std::find(batch.nodes.begin(), batch.nodes.end(), node) ==
-            batch.nodes.end()) {
-          batch.nodes.push_back(node);
-          if (g.device == torch::kCPU) {
-            batch.nnInputs.push_back(
-                createState(constructHistory(node), g.device));
-          }
+        if (!node->pendingEval) {
+          // Arbitrarily push into the central inference queue; the predictor
+          // decides the grouping together with other games' requests.
+          node->pendingEval = true;
+          g.requests.push_back(g.predictor->enqueue(node));
         }
         virtualMean(node, ownMean, g);
       }
@@ -334,38 +284,39 @@ float batchPUCT(Node *node, bool batchMode, GlobalData &g,
   return value;
 }
 
-void getBatch(Node *root, GlobalData &g, int maxBatch) {
-  Batch &batch = g.batch;
+void collect(Node *root, GlobalData &g, int maxEvaluations) {
+  auto &requests = g.requests;
 
-  for (int i = 0;
-       i < MAX_DESCENTS && static_cast<int>(batch.nodes.size()) < maxBatch;
+  for (int i = 0; i < MAX_DESCENTS &&
+                  static_cast<int>(requests.size()) < maxEvaluations;
        i++) {
     batchPUCT(root, true, g);
   }
 }
 
-void putBatch(Node *root, Eval &outputs, GlobalData &g) {
-  Batch &batch = g.batch;
-  std::vector<Node *> &nodes = batch.nodes;
+// Waits for this epoch's evaluations to arrive from the central predictor
+// (they may be split across several forward passes), attaches them to the
+// collected nodes, then folds them into the real tree statistics.
+void consume(Node *root, GlobalData &g) {
+  std::vector<std::shared_ptr<Request>> &requests = g.requests;
 
-  torch::Tensor policyCpu =
-      outputs.policy.to(torch::kCPU, torch::kFloat32)
-          .reshape({static_cast<int64_t>(nodes.size()), -1})
-          .contiguous();
-  torch::Tensor valueCpu = outputs.value.to(torch::kCPU, torch::kFloat32)
-                               .reshape({-1})
-                               .contiguous();
-  auto policy = policyCpu.accessor<float, 2>();
-  auto value = valueCpu.accessor<float, 1>();
+  std::vector<Eval> evals;
+  evals.reserve(requests.size());
+  for (const auto &request : requests) {
+    evals.push_back(request->future.get());
+  }
 
-  for (size_t i = 0; i < nodes.size(); i++) {
-    Node *node = nodes[i];
+  for (size_t i = 0; i < requests.size(); i++) {
+    Node *node = requests[i]->node;
+
     std::vector<Midnight::Move> moves = createMovelistVec(node->position);
+    const float value = evals[i].value.item<float>();
+    auto policy = evals[i].policy.accessor<float, 1>();
 
-    if (moves.empty() || !std::isfinite(value[i])) {
+    if (moves.empty() || !std::isfinite(value)) {
       throw std::runtime_error(
-          "putBatch: unusable network output at " + node->position.fen() +
-          " (value " + std::to_string(value[i]) + ", " +
+          "consume: unusable network output at " + node->position.fen() +
+          " (value " + std::to_string(value) + ", " +
           std::to_string(moves.size()) +
           " legal moves). If the weights diverged, check the training loss.");
     }
@@ -373,7 +324,7 @@ void putBatch(Node *root, Eval &outputs, GlobalData &g) {
     std::vector<float> priors(moves.size());
     float maxLogit = -INFINITY;
     for (size_t k = 0; k < moves.size(); k++) {
-      priors[k] = policy[i][policyIndex(node->position, moves[k])];
+      priors[k] = policy[policyIndex(node->position, moves[k])];
       maxLogit = std::max(maxLogit, priors[k]);
     }
     float sum = 0.0f;
@@ -384,7 +335,7 @@ void putBatch(Node *root, Eval &outputs, GlobalData &g) {
       sum += p;
     }
     if (!std::isfinite(sum)) {
-      throw std::runtime_error("putBatch: non-finite policy output at " +
+      throw std::runtime_error("consume: non-finite policy output at " +
                                node->position.fen());
     }
 
@@ -397,11 +348,11 @@ void putBatch(Node *root, Eval &outputs, GlobalData &g) {
       node->children.insert(new Node(node, {}, newBoard, prior));
     }
 
-    node->valueEval = value[i];
+    node->valueEval = value;
+    node->pendingEval = false;
   }
 
-  batch.nnInputs.clear();
-  batch.nodes.clear();
+  g.requests.clear();
 
   for (int i = 0; i < MAX_DESCENTS; i++) {
     if (batchPUCT(root, false, g) == UNKNOWN) {
@@ -467,8 +418,9 @@ Sample makeSample(Node *root) {
 
     for (Node *child : root->children) {
       if (child->position.hash() == next.hash()) {
-        sample.policy.push_back({policyIndex(root->position, move),
-                                 static_cast<float>(child->visitCount) / total});
+        sample.policy.push_back(
+            {policyIndex(root->position, move),
+             static_cast<float>(child->visitCount) / total});
         break;
       }
     }
@@ -477,8 +429,8 @@ Sample makeSample(Node *root) {
   return sample;
 }
 
-Node *getNextMove(Node *root, DNN &model, float temperature, GlobalData &g) {
-  Batch &batch = g.batch;
+Node *getNextMove(Node *root, float temperature, GlobalData &g) {
+  auto &requests = g.requests;
 
   if (isTerminal(root->position)) {
     return nullptr;
@@ -488,29 +440,14 @@ Node *getNextMove(Node *root, DNN &model, float temperature, GlobalData &g) {
   while (evaluations < SIMULATIONS) {
     g.currBatchNum += 1;
 
-    getBatch(root, g, std::min<int>(BATCH_SIZE, SIMULATIONS - evaluations));
-    if (batch.nodes.empty()) {
+    collect(root, g,
+            std::min<int>(PREDICTOR_MAX_BATCH, SIMULATIONS - evaluations));
+    if (requests.empty()) {
       break;
     }
 
-    torch::Tensor batchedInput;
-    if (g.device == torch::kCPU) {
-      batchedInput = torch::zeros({static_cast<long>(batch.nnInputs.size()),
-                                   INPUT_PLANES, 8, 8})
-                         .to(g.device);
-      for (size_t j = 0; j < batch.nnInputs.size(); j++) {
-        batchedInput[j] = batch.nnInputs[j].to(g.device);
-      }
-    } else {
-#ifdef HAS_CUDA
-      batchedInput = createStateFast(batch.nodes, g.device);
-#endif
-    }
-
-    evaluations += static_cast<int>(batch.nodes.size());
-
-    Eval outputs = model->forward(batchedInput);
-    putBatch(root, outputs, g);
+    evaluations += static_cast<int>(requests.size());
+    consume(root, g);
   }
 
   return selectMove(root, temperature);

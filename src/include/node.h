@@ -1,8 +1,8 @@
 #pragma once
 
+#include "move_gen.h"
 #include <cmath>
 #include <set>
-#include "move_gen.h"
 
 // one node in the mcts game tree.
 struct Node {
@@ -22,6 +22,7 @@ struct Node {
 
   float valueEval = INFINITY;
   float policyEval;
+  bool pendingEval = false;
 
   Node(Node *_parent, const std::set<Node *> _children,
        const Midnight::Position _position) {
