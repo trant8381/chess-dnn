@@ -91,3 +91,38 @@ else()
   target_link_libraries(play ${TORCH_LIBRARIES})
   target_compile_options(play PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
 endif()
+
+# ------------------ Tests ------------------
+set(TESTS_DIR "${MAIN_PATH}/tests")
+
+function(add_chess_test TEST_NAME)
+  add_executable(${TEST_NAME} ${ARGN})
+  target_include_directories(${TEST_NAME} PRIVATE ${SRC}/include ${TESTS_DIR})
+  target_link_libraries(${TEST_NAME} PRIVATE ${TORCH_LIBRARIES})
+  target_compile_options(${TEST_NAME} PRIVATE -Wall -Wextra -Wpedantic -Werror -g)
+endfunction()
+
+add_chess_test(test_movegen ${TESTS_DIR}/test_movegen.cpp)
+add_chess_test(test_state_cpu ${TESTS_DIR}/test_state_cpu.cpp ${SRC}/create_state.cpp)
+
+if (CMAKE_CUDA_COMPILER_LOADED)
+  add_chess_test(test_state_fast
+      ${TESTS_DIR}/test_state_fast.cpp ${SRC}/create_state.cpp)
+  add_chess_test(test_predictor
+      ${TESTS_DIR}/test_predictor.cpp ${SRC}/create_state.cpp ${SRC}/predictor.cpp)
+  add_chess_test(test_mcts
+      ${TESTS_DIR}/test_mcts.cpp ${SRC}/create_state.cpp ${SRC}/predictor.cpp
+      ${SRC}/mcts.cpp)
+
+  foreach(tgt test_state_fast test_predictor test_mcts)
+    set_property(TARGET ${tgt} PROPERTY CUDA_SEPARABLE_COMPILATION ON)
+    target_compile_definitions(${tgt} PRIVATE HAS_CUDA)
+    target_link_libraries(${tgt} PRIVATE cuda_uint64)
+  endforeach()
+else()
+  add_chess_test(test_predictor
+      ${TESTS_DIR}/test_predictor.cpp ${SRC}/create_state.cpp ${SRC}/predictor.cpp)
+  add_chess_test(test_mcts
+      ${TESTS_DIR}/test_mcts.cpp ${SRC}/create_state.cpp ${SRC}/predictor.cpp
+      ${SRC}/mcts.cpp)
+endif()

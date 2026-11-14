@@ -46,17 +46,19 @@ NNInputBatch constructHistoryFast(std::vector<Node *> nodes) {
     }
 
     histories.push_back(std::move(history));
-    scalars.push_back(
-        {board.fifty_move_rule() / 100.0f, board.moves() / 100.0f,
-         static_cast<float>(board.turn()),
-         static_cast<float>(
-             board.king_and_oo_rook_not_moved<Midnight::WHITE>()),
-         static_cast<float>(
-             board.king_and_ooo_rook_not_moved<Midnight::WHITE>()),
-         static_cast<float>(
-             board.king_and_oo_rook_not_moved<Midnight::BLACK>()),
-         static_cast<float>(
-             board.king_and_ooo_rook_not_moved<Midnight::BLACK>())});
+    // Keep this order in sync with createState() in create_state.cpp:
+    // turn, moves/100, white OO, white OOO, black OO, black OOO, fifty/100.
+    scalars.push_back({static_cast<float>(board.turn()),
+                       board.moves() / 100.0f,
+                       static_cast<float>(
+                           board.king_and_oo_rook_not_moved<Midnight::WHITE>()),
+                       static_cast<float>(
+                           board.king_and_ooo_rook_not_moved<Midnight::WHITE>()),
+                       static_cast<float>(
+                           board.king_and_oo_rook_not_moved<Midnight::BLACK>()),
+                       static_cast<float>(
+                           board.king_and_ooo_rook_not_moved<Midnight::BLACK>()),
+                       board.fifty_move_rule() / 100.0f});
   }
 
   return input;

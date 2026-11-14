@@ -437,11 +437,12 @@ Node *getNextMove(Node *root, float temperature, GlobalData &g) {
   }
 
   int evaluations = 0;
-  while (evaluations < SIMULATIONS) {
+  while (evaluations < g.simulations) {
     g.currBatchNum += 1;
 
     collect(root, g,
-            std::min<int>(PREDICTOR_MAX_BATCH, SIMULATIONS - evaluations));
+            std::min<size_t>(g.predictor->maxBatchTarget(),
+                             static_cast<size_t>(g.simulations - evaluations)));
     if (requests.empty()) {
       break;
     }

@@ -13,6 +13,8 @@ struct GlobalData {
   std::vector<std::shared_ptr<Request>> requests;
   Predictor *predictor;
   [[maybe_unused]] const torch::Device device;
+  // Runtime-tunable search budget; defaults to constants.h SIMULATIONS.
+  int simulations = SIMULATIONS;
 
   GlobalData(const torch::Device &_device, Predictor *_predictor)
       : predictor(_predictor), device(_device) {};
